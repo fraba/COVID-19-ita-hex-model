@@ -1,0 +1,103 @@
+---
+title: "Model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(zoo)
+library(viridis)
+library(gridExtra)
+```
+
+```{r}
+load("../grid/hex_ita_10km.sf.RData")
+load("../air_quality/airquality.df.RData")
+load("../dead/hex_dead.df.RData")
+```
+
+
+# Model dependent variable
+
+```{r}
+m <- 
+  expand.grid(hex_ita_1km.sf$hex_id, 
+              paste0("M_", 15:20), 
+              unique(hex_dead.df$day))
+names(m) <- c("hex_id","year","day")
+
+hex_dead.df <- merge(hex_dead.df, m, by = c("hex_id","year","day"), all.y = T)
+hex_dead.df$Freq[is.na(hex_dead.df$Freq)] <- 0
+
+hex_dead.df <-
+  hex_dead.df %>%
+  dplyr::group_by(hex_id, year) %>%
+  dplyr::arrange(day) %>%
+  dplyr::mutate(ma14 = rollmean(Freq, 14, align = 'right', fill = NA))
+
+hex_dead_wide.df <- 
+  hex_dead.df %>%
+  dplyr::select(-Freq) %>%
+  tidyr::pivot_wider(names_from = year, values_from = ma14)
+
+hex_dead_wide.df$sd_15_19 <- 
+  apply(hex_dead_wide.df[,3:7], 1, FUN = sd)
+hex_dead_wide.df$mean_15_19 <- 
+  apply(hex_dead_wide.df[,3:7], 1, FUN = mean)
+hex_dead_wide.df$dist_sd <- 
+  (hex_dead_wide.df$M_20 - 
+     hex_dead_wide.df$mean_15_19) /
+  hex_dead_wide.df$sd_15_19 
+```
+
+
+```{r, fig.width = 10, fig.height = 40}
+all_days <- unique(hex_dead_wide.df$day[!is.na(hex_dead_wide.df$M_20)])
+
+region.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+
+funPlot <- function(day) {
+  this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
+  hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
+                                                 this_dat$hex_id)]
+  return(ggplot() +
+           geom_sf(data = hex_ita_1km.sf, aes(fill = value), colour = NA) +
+           scale_fill_distiller(palette = "YlOrRd", direction = 1,
+                                limits  = c(-14.1037, 54)) +
+           geom_sf(data = region.sf, fill = NA, size = .1) +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank(),
+                 legend.position = 'none') +
+           labs(caption = paste0("Day: ", day),
+                fill = "Diff."))
+}
+
+plot.list <- lapply(all_days, funPlot)
+do.call("grid.arrange", c(plot.list, ncol=6))
+```
+
+
+```{r eval = F}
+funPlot <- function(day) {
+  this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
+  hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
+                                                 this_dat$hex_id)]
+  return(ggplot() +
+           geom_sf(data = hex_ita_1km.sf, aes(fill = value), colour = NA) +
+           scale_fill_distiller(palette = "YlOrRd", direction = 1,
+                                limits  = c(-14.1037, 54)) +
+           geom_sf(data = region.sf, fill = NA, size = .1) +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank(),
+                 legend.position = 'none') +
+           labs(caption = paste0("Day: ", day),
+                fill = "Diff."))
+}
+```
+
