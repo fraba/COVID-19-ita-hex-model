@@ -66,10 +66,13 @@ funPlot <- function(day) {
   this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
   hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
                                                  this_dat$hex_id)]
+  hex_ita_1km.sf$value_cut <- cut(hex_ita_1km.sf$value, 
+                                  breaks = c(-128,-50,-10,-5,0,5,10,50,128),
+                                  include.lowest = T)
   return(ggplot() +
-           geom_sf(data = hex_ita_1km.sf, aes(fill = value), colour = NA) +
-           scale_fill_distiller(palette = "YlOrRd", direction = 1,
-                                limits  = c(-14.1037, 54)) +
+           geom_sf(data = hex_ita_1km.sf, aes(fill = value_cut), colour = NA) +
+           scale_fill_brewer(palette = "YlOrRd", direction = 1,
+                             drop = F) +
            geom_sf(data = region.sf, fill = NA, size = .1) +
            theme(axis.text = element_blank(),
                  axis.ticks = element_blank(),
@@ -83,21 +86,45 @@ do.call("grid.arrange", c(plot.list, ncol=6))
 ```
 
 
-```{r eval = F}
-funPlot <- function(day) {
+```{r animation, eval = F}
+
+region.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+province.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/ProvCM01012020/ProvCM01012020_WGS84.shp")
+
+funPlotGif <- function(day) {
   this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
   hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
                                                  this_dat$hex_id)]
+    hex_ita_1km.sf$value_cut <- cut(hex_ita_1km.sf$value, 
+                                  breaks = rev(c(-128,-50,-10,-5,-2, 2,5,10,50,128)),
+                                  include.lowest = T)
+    
+    hex_ita_1km.sf$value_cut <- factor(hex_ita_1km.sf$value_cut,
+                                       levels = rev(levels(hex_ita_1km.sf$value_cut)))
+    
   return(ggplot() +
-           geom_sf(data = hex_ita_1km.sf, aes(fill = value), colour = NA) +
-           scale_fill_distiller(palette = "YlOrRd", direction = 1,
-                                limits  = c(-14.1037, 54)) +
-           geom_sf(data = region.sf, fill = NA, size = .1) +
+           geom_sf(data = hex_ita_1km.sf, aes(fill = value_cut), colour = NA) +
+           scale_fill_brewer(palette = "Spectral", direction = -1, drop = FALSE) +
+           geom_sf(data = region.sf, fill = NA, size = .2) +
+           geom_sf(data = province.sf, fill = NA, size = .1) +
+           theme_bw() +
            theme(axis.text = element_blank(),
                  axis.ticks = element_blank(),
-                 legend.position = 'none') +
-           labs(caption = paste0("Day: ", day),
-                fill = "Diff."))
+                 legend.position = c(.8,.75)) +
+           labs(caption = paste0(as.Date(paste0("2020", day), format = "%Y%m%d"), "    (right-aligned 14-day m.a.)"),
+                fill = "Difference in SD\nfrom 2015-19 mean",
+                title = "Number of deaths (every cause): 2020 / 2015-19 difference") +
+           coord_sf(ylim = c(4100000, 5200000)))
+}
+
+plot.list <- lapply(all_days, funPlotGif)
+
+for (i in 1:length(plot.list)) {
+  print(i)
+  file_name = sprintf("tiff/%02d.tiff", i)
+  ggsave(filename = file_name, plot.list[[i]])
 }
 ```
 
