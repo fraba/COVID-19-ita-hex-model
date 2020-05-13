@@ -1,0 +1,89 @@
+---
+title: "Air quality (Covid-19 Research)"
+author: "Francesco Bailo"
+date: "25/04/2020"
+output: html_document
+---
+
+# NOTE: Compile from command line 
+R -e "Sys.setenv(RSTUDIO_PANDOC='/usr/lib/rstudio-server/bin/pandoc'); rmarkdown::render('README.Rmd',output_file='README.html')"
+
+```{r libraries, message=F, warning=F}
+library(dplyr)
+library(knitr)
+library(sf)
+library(ggplot2)
+library(viridis)
+library(raster)
+library(stars)
+library(parallel)
+library(gridExtra)
+
+knitr::opts_chunk$set(echo = TRUE, message=F, warning=F)
+```
+
+```{r}
+r.stars <- 
+  read_stars("adaptor.cams_regional_fc.retrieve-1588048559.0080748-2499-7-2786eb2f-f42f-46e1-953e-8b830990de9b.nc")
+vars <- names(r.stars)
+vars
+```
+
+```{r}
+dates <- seq(as.Date("2020-01-01"), as.Date("2020-04-26"), by = 1)
+dates
+```
+
+```{r}
+
+load("../grid/hex_ita_1km.sf.RData")
+st_crs(hex_ita_1km.sf) <- 32632
+hex_ita_1km.sf <- st_transform(hex_ita_1km.sf, 4326)
+
+fun1 <- function(i, var, hex_ita_1km.sf, dates) {
+  require(raster)
+  require(sf)
+  r <- raster(sprintf('%s.tiff', var), band = i)
+  res <- raster::extract(r, hex_ita_1km.sf, fun = mean, weights  = T)
+  return(data.frame(hex_id = 1:nrow(hex_ita_1km.sf),
+                    date = dates[i],
+                    var = var,
+                    value = res[,1]))
+}
+
+cl <- makeCluster(10)
+airquality.df <- data.frame(stringsAsFactors = F)
+for (var in vars) {
+  res.list <- parLapply(cl, 1:length(dates), fun1, var, hex_ita_1km.sf, dates)
+  res.df <- bind_rows(res.list)
+  airquality.df <- rbind(airquality.df, res.df)
+}
+
+stopCluster(cl)
+
+save(airquality.df, file = "airquality.df.RData")
+
+```
+
+```{r}
+fun2 <- function(i) {
+  smpl_var <- sample(unique(airquality.df$var), 1)
+  smpl_date <- sample(unique(airquality.df$date), 1)
+  smpl_dat <- airquality.df %>% filter(var == smpl_var & date == smpl_date)
+  hex_ita_1km.sf$smpl_value <- smpl_dat$value
+  return(ggplot(hex_ita_1km.sf) +
+           geom_sf(aes(fill = smpl_value), colour = NA) +
+           scale_fill_distiller(palette = "Spectral", direction = 1) +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           labs(caption = paste0(smpl_var, " ", smpl_date), fill = NULL) +
+           guides(fill = FALSE))
+}
+
+plot.list <- lapply(1:25, fun2)
+do.call("grid.arrange", c(plot.list, ncol=5))
+```
+
+
+
+

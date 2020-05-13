@@ -1,0 +1,124 @@
+---
+title: "Grid"
+author: "Francesco Bailo"
+date: "25/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(knitr)
+library(sf)
+library(ggplot2)
+library(viridis)
+```
+
+```{r}
+
+ita_buffer.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp") %>%
+  st_combine() %>%
+  st_buffer(1000)
+
+hex_ita_1km.sf <- 
+  st_make_grid(ita_buffer.sf,
+               cellsize = 10000, 
+               square = FALSE) %>%
+  st_sf(hex_id = 0)
+hex_ita_1km.sf$hex_id <- 1:nrow(hex_ita_1km.sf)
+```
+
+```{r}
+ggplot(hex_ita_1km.sf) + geom_sf()
+```
+
+## Intersect with census sections
+
+```{r}
+sez2011_centroids.df <- read.csv("../census_2011/census_lonlat_sez_2011.csv")
+sez2011_centroids.sf <-
+  st_as_sf(sez2011_centroids.df, coords = c("lon", "lat"), crs = 4326)
+
+res_sez_2011 <- 
+  st_intersects(
+    sez2011_centroids.sf %>% 
+      st_transform(32632), 
+    hex_ita_1km.sf)
+is.na(res_sez_2011) <- lengths(res_sez_2011) == 0
+
+sez2011_centroids.sf$hex_id <- unlist(res_sez_2011)
+```
+
+## Add census data
+
+### Population
+
+```{r}
+sez2011_population.df <- read.csv("../census_2011/census_population_sez_2011.csv")
+
+sez2011_population.df$hex_id <- 
+  sez2011_centroids.sf$hex_id[match(sez2011_population.df$sez2011,
+                                    sez2011_centroids.sf$sez2011)]
+
+sez2011_population.df$E6 <- 
+  as.numeric(as.character(sez2011_population.df$E6))
+sez2011_population.df$E6[is.na(sez2011_population.df$E6)] <- 0
+
+hex_population.df <- 
+  sez2011_population.df %>%
+  dplyr::select(hex_id, CODREG:PROCOM, P1:E31) %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::mutate_at(vars(CODREG:PROCOM), function(x) names(which.max(table(x)))) %>%
+  dplyr::mutate_at(vars(P1:E31), sum, na.rm = TRUE) %>%
+  dplyr::distinct()
+
+hex_ita_1km.sf <-
+  merge(hex_ita_1km.sf, 
+        hex_population.df, 
+        by = "hex_id",
+        all.x = T)
+```
+
+### Industry
+
+```{r}
+sez2011_industry.df <- read.csv("../census_2011/census_industry_sez_2011.csv")
+
+sez2011_industry.df$hex_id <- 
+  sez2011_centroids.sf$hex_id[match(sez2011_industry.df$SEZ2011,
+                                    sez2011_centroids.sf$sez2011)]
+
+hex_industry.df <- 
+  sez2011_industry.df %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarize(n_companies = n(),
+                   mean_company_units = mean(NUM_UNITA, na.rm=T),
+                   sum_employees = sum(ADDETTI, na.rm=T),
+                   median_employees = median(ADDETTI, na.rm=T)
+  )
+
+
+hex_ita_1km.sf <-
+  merge(hex_ita_1km.sf, 
+        hex_industry.df, 
+        by = "hex_id",
+        all.x = T)
+```
+
+
+```{r}
+ggplot(hex_ita_1km.sf) +
+  geom_sf(aes(fill = P1)) +
+  scale_fill_viridis()
+
+ggplot(hex_ita_1km.sf) +
+  geom_sf(aes(fill = sum_employees)) +
+  scale_fill_viridis()
+```
+
+## Save
+
+```{r}
+save(hex_ita_1km.sf, file = "hex_ita_1km.sf.RData")
+```
+
