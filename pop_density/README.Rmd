@@ -1,0 +1,95 @@
+---
+title: "Population density"
+author: "Francesco Bailo"
+date: "03/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(parallel)
+
+load("../grid/hex_ita_10km.sf.RData")
+load("/mnt/rstudio/rstudio_wd/COVID-19-ita-hex-model/census_2011/census_polygons.sf.RData")
+```
+
+
+```{r}
+sez2011_centroids.df <- 
+  read.csv("../census_2011/census_lonlat_sez_2011.csv")
+sez2011_centroids.sf <-
+  st_as_sf(sez2011_centroids.df, coords = c("lon", "lat"), crs = 4326)
+
+census_population_sez_2011 <-
+  read_csv("../census_2011/census_population_sez_2011.csv.zip")
+
+
+```
+
+
+```{r, testing}
+
+i <- 690
+
+computeDensities <- function(i) {
+  require(sf)
+  require(DescTools)
+  
+  res.pnt <- 
+    st_intersection(st_transform(sez2011_centroids.sf, 32632),
+                    st_geometry(hex_ita_1km.sf[hex_ita_1km.sf$hex_id == i,]))
+  res.pnt$P1 <-
+    census_population_sez_2011$P1[match(res.pnt$sez2011, 
+                                        census_population_sez_2011$sez2011)]
+  res.pnt <- 
+    res.pnt[res.pnt$P1>0,]
+  res_poly.sf <- 
+    census_polygons.sf[census_polygons.sf$sez2011 %in% res.pnt$sez2011,]
+  res_poly.sf$area_km2 <- 
+    as.numeric(st_area(res_poly.sf)) / 1e+6
+  res_poly.sf$P1 <- 
+    res.pnt$P1[match(res_poly.sf$sez2011,res.pnt$sez2011)]
+  
+  this_median_density <- median(res_poly.sf$P1 / res_poly.sf$area_km2)
+  
+  this_census <- 
+    census_population_sez_2011[census_population_sez_2011$sez2011 %in%
+                                 res_poly.sf$sez2011,]
+  
+  this_gini_over74 <- Gini(this_census$P29 / this_census$P1) 
+  
+  return(data.frame(hex_id = i,
+                    median_density_km2 = this_median_density,
+                    gini_over74 = this_gini_over74))
+
+}
+
+cl <- makeCluster(10)
+clusterExport(cl=cl, varlist=c("sez2011_centroids.sf", 
+                               "hex_ita_1km.sf", 
+                               "census_population_sez_2011",
+                               "census_polygons.sf"))
+res.list <- 
+  parLapply(cl, hex_ita_1km.sf$hex_id, computeDensities)
+pop_densities.df <- 
+  bind_rows(res.list)
+stopCluster()
+
+save(pop_densities.df, file = "pop_densities.df.RData")
+
+hex_ita_1km.sf$gini_over74 <- 
+  pop_densities.df$gini_over74[match(hex_ita_1km.sf$hex_id,
+                                            pop_densities.df$hex_id)]
+
+hex_ita_1km.sf$median_density_km2 <- 
+  pop_densities.df$median_density_km2[match(hex_ita_1km.sf$hex_id,
+                                            pop_densities.df$hex_id)]
+
+ggplot(hex_ita_1km.sf) +
+  geom_sf(aes(fill = gini_over74), colour = NA) +
+  scale_fill_viridis()
+```
+

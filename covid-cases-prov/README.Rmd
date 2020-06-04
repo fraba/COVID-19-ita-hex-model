@@ -1,0 +1,150 @@
+---
+title: "Covid Cases (Province level)"
+author: "Francesco Bailo"
+date: "19/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(jsonlite)
+library(curl)
+library(sf)
+library(dplyr)
+library(parallel)
+```
+
+# Regional level (tests)
+
+```{r}
+json_url <- "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-json/dpc-covid19-ita-regioni.json"
+dat.df <- 
+  jsonlite::fromJSON(json_url)
+
+dat.df$denominazione_regione[dat.df$codice_regione > 20] <- "Trentino-Alto Adige"
+dat.df$codice_regione[dat.df$codice_regione > 20] <- 4 
+
+dat.df <- 
+  dat.df %>%
+  dplyr::group_by(data, codice_regione, denominazione_regione) %>%
+  dplyr::summarise_at(vars(ricoverati_con_sintomi:casi_testati), sum)
+
+reg.sf <- 
+  sf::read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+
+
+dat.df$nuovi_positivi[dat.df$nuovi_positivi < 0] <- 0
+
+dat.df$tamponi[dat.df$codice_regione == 16 &
+         dat.df$data == "2020-02-27T18:00:00"] <- 1
+
+require(zoo)
+reg_testing.df <- 
+  dat.df %>%
+  mutate(date = as.Date(data, format = "%Y-%m-%dT%H:%M:%S")) %>%
+  select(codice_regione, denominazione_regione, date, nuovi_positivi, tamponi) %>%
+  group_by(codice_regione, denominazione_regione) %>%
+  arrange(date) %>%
+  mutate(cases_ma7 = rollmean(nuovi_positivi, 7, align = 'left', fill = NA),
+         tests_ma7 = rollmean(tamponi, 7, align = 'left', fill = NA))
+
+require(ggplot2)
+reg_testing.df %>%
+  dplyr::filter(codice_regione %in% 1:5) %>%
+  ggplot(aes(x=date, y=cases_ma7/tests_ma7, colour = as.factor(denominazione_regione))) +
+  geom_line()
+
+save(reg_testing.df, file = "reg_testing.df.RData")
+
+```
+
+```{r}
+load("../grid/hex_ita_10km.sf.RData")
+```
+
+```{r}
+all_days <- unique(dat.df$data)
+
+fun1 <- function(i, dat.df, reg.sf, hex_ita_1km.sf, all_days) {
+  require(sf)
+  this.sf <- merge(reg.sf, dat.df[dat.df$data == all_days[i],], 
+                   by.x = 'COD_REG', by.y = 'codice_regione')
+  this_sample.sf <- 
+    sf::st_sample(this.sf, this.sf$tamponi)
+  this_res <- 
+    as.data.frame(table(unlist(st_within(this_sample.sf, hex_ita_1km.sf))))
+  if(nrow(this_res)>0) {
+    names(this_res) <- c("hex_id","tests")
+  } else {
+    this_res <- 
+      data.frame(hex_id = NA, 
+                 cases = NA)
+  }
+  this_res$date <- as.Date(all_days[i], format = "%Y-%m-%dT%H:%M:%S")
+  return(this_res)
+}
+
+cl <- makeCluster(10)
+
+hex_tests.list <- parLapply(cl, 1:2, fun1, dat.df, reg.sf, hex_ita_1km.sf, all_days)
+
+stopCluster(cl)
+
+hex_tests.df <- bind_rows(hex_tests.list)
+
+save(hex_cases.df, file = "hex_cases.df.RData")
+
+```
+
+# Provincial level (cases)
+
+```{r}
+json_url <- "https://github.com/pcm-dpc/COVID-19/raw/master/dati-json/dpc-covid19-ita-province.json"
+dat.df <- 
+  jsonlite::fromJSON(json_url) %>% 
+  dplyr::filter(codice_provincia < 900)
+prov.sf <- 
+  sf::read_sf("../shapefile/Italy/Limiti01012020/ProvCM01012020/ProvCM01012020_WGS84.shp")
+```
+
+```{r}
+load("../grid/hex_ita_10km.sf.RData")
+```
+
+```{r}
+all_days <- unique(dat.df$data)
+
+fun1 <- function(i, dat.df, prov.sf, hex_ita_1km.sf, all_days) {
+  require(sf)
+  this.sf <- merge(prov.sf, dat.df[dat.df$data == all_days[i],], 
+                   by.x = 'COD_PROV', by.y = 'codice_provincia')
+  this_sample.sf <- 
+    sf::st_sample(this.sf, this.sf$totale_casi)
+  this_res <- 
+    as.data.frame(table(unlist(st_within(this_sample.sf, hex_ita_1km.sf))))
+  if(nrow(this_res)>0) {
+    names(this_res) <- c("hex_id","cases")
+  } else {
+    this_res <- 
+      data.frame(hex_id = NA, 
+                 cases = NA)
+  }
+  this_res$date <- as.Date(all_days[i], format = "%Y-%m-%dT%H:%M:%S")
+  return(this_res)
+}
+
+cl <- makeCluster(10)
+
+hex_cases.list <- parLapply(cl, 1:2, fun1, dat.df, prov.sf, hex_ita_1km.sf, all_days)
+
+stopCluster(cl)
+
+hex_cases.df <- bind_rows(hex_cases.list)
+
+save(hex_cases.df, file = "hex_cases.df.RData")
+
+```
+

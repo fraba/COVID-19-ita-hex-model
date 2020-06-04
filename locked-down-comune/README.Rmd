@@ -1,0 +1,226 @@
+---
+title: "Locked down comune"
+author: "Francesco Bailo"
+date: "01/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(viridis)
+
+load("../grid/hex_ita_10km.sf.RData")
+italy.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_clipped_to_hex.shp") %>% 
+  sf::st_simplify(preserveTopology = TRUE, dTolerance = 1000) %>%
+  sf::st_make_valid()
+
+italy_raw.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_WGS84.shp")
+```
+
+```{r}
+# 23 Feb - 8 March
+feb23_locked_down <- 
+  c("098010","098014","098026", "098019",
+    "098035","098054","098002","098057",
+    "098062","098047","028105")
+
+mar8_locked_down <- 
+  c(italy.sf$PRO_COM_T[italy.sf$COD_REG == 3],
+    italy.sf$PRO_COM_T[italy.sf$COD_PROV %in% c(36,34,33,
+                                                35,99,41,
+                                                6,5,3,
+                                                103,2,28,
+                                                26,27)])
+
+italy_raw.sf$feb23_locked_down <- 
+  italy_raw.sf$PRO_COM_T %in% feb23_locked_down
+italy_raw.sf$mar8_locked_down <- 
+  italy_raw.sf$PRO_COM_T %in% mar8_locked_down
+
+ggplot(italy_raw.sf %>% filter(COD_PROV == 98)) +
+  geom_sf(aes(fill = !PRO_COM_T %in% feb23_locked_down), size = .05) +
+  scale_fill_grey() +
+  theme_bw() + theme(legend.position = 'bottom')
+
+ggplot(italy_raw.sf) +
+  geom_sf(aes(fill = !PRO_COM_T %in% mar8_locked_down), size = .05) +
+  scale_fill_grey() +
+  theme_bw() + theme(legend.position = 'bottom')
+```
+
+## Census
+
+```{r}
+census_lonlat_sez_2011 <- read_csv("/mnt/rstudio/rstudio_wd/COVID-19-ita-hex-model/census_2011/census_lonlat_sez_2011.csv")
+
+census_population_sez_2011 <- read_csv("/mnt/rstudio/rstudio_wd/COVID-19-ita-hex-model/census_2011/census_population_sez_2011.csv.zip")
+```
+
+
+```{r}
+italy_feb23_locked_down.sf <- 
+  italy_raw.sf %>% dplyr::filter(feb23_locked_down) %>% st_union()
+
+italy_mar8_locked_down.sf <- 
+  italy_raw.sf %>% dplyr::filter(mar8_locked_down) %>% st_union()
+
+
+hex_ita_1km.sf$area <- as.numeric(st_area(hex_ita_1km.sf))
+
+# Area difference
+
+## Feb 23
+res_feb23 <- 
+  st_intersection(hex_ita_1km.sf, italy_feb23_locked_down.sf)
+
+res_feb23$diff_area <- 
+  86602540 - as.numeric(st_area(res_feb23))
+
+res_feb23_reduced <-
+  res_feb23 %>% filter(diff_area > 0)
+
+res_feb23_full <- 
+  res_feb23 %>% filter(diff_area == 0)
+
+res_feb23_reduced.pnt <- 
+  st_intersection(st_as_sf(census_lonlat_sez_2011, 
+                        coords = c("lon", "lat"), 
+                        crs = 4326) %>%
+                    filter(sez2011 %in% 
+                             census_population_sez_2011$sez2011) %>%
+                 st_transform(32632), 
+               res_feb23_reduced)
+
+res_feb23_reduced.pnt$P1.sez <- 
+  census_population_sez_2011$P1[match(res_feb23_reduced.pnt$sez2011,
+                                      census_population_sez_2011$sez2011)] 
+
+res_feb23_reduced.tab <- 
+  res_feb23_reduced.pnt %>% group_by(hex_id) %>% 
+  summarize(P1 = sum(P1.sez))
+  
+res_feb23_reduced$P1_feb23_locked_down <-
+  res_feb23_reduced.tab$P1[match(res_feb23_reduced$hex_id,
+                                 res_feb23_reduced.tab$hex_id)]
+
+res_feb23_reduced$P1_feb23_locked_down[is.na(
+  res_feb23_reduced$P1_feb23_locked_down)] <- 0
+
+res_feb23_full$P1_feb23_locked_down <- 
+  res_feb23_full$P1
+
+st_geometry(res_feb23_reduced) <- NULL
+st_geometry(res_feb23_full) <- NULL
+
+res_feb23 <- 
+  rbind(res_feb23_reduced %>% select(hex_id, P1, P1_feb23_locked_down),
+        res_feb23_full %>% select(hex_id, P1, P1_feb23_locked_down))
+  
+## Mar 9
+res_mar8 <- 
+  st_intersection(hex_ita_1km.sf, italy_mar8_locked_down.sf)
+
+res_mar8$diff_area <- 
+  max(as.numeric(st_area(res_mar8))) - as.numeric(st_area(res_mar8))
+
+res_mar8_reduced <-
+  res_mar8 %>% filter(diff_area > 0)
+
+res_mar8_full <- 
+  res_mar8 %>% filter(diff_area == 0)
+
+res_mar8_reduced.pnt <- 
+  st_intersection(st_as_sf(census_lonlat_sez_2011, 
+                        coords = c("lon", "lat"), 
+                        crs = 4326) %>%
+                    filter(sez2011 %in% 
+                             census_population_sez_2011$sez2011) %>%
+                 st_transform(32632), 
+               res_mar8_reduced)
+
+res_mar8_reduced.pnt$P1.sez <- 
+  census_population_sez_2011$P1[match(res_mar8_reduced.pnt$sez2011,
+                                      census_population_sez_2011$sez2011)] 
+
+res_mar8_reduced.tab <- 
+  res_mar8_reduced.pnt %>% group_by(hex_id) %>% 
+  summarize(P1 = sum(P1.sez))
+  
+res_mar8_reduced$P1_mar8_locked_down <-
+  res_mar8_reduced.tab$P1[match(res_mar8_reduced$hex_id,
+                                 res_mar8_reduced.tab$hex_id)]
+
+res_mar8_reduced$P1_mar8_locked_down[is.na(
+  res_mar8_reduced$P1_mar8_locked_down)] <- 0
+
+res_mar8_full$P1_mar8_locked_down <- 
+  res_mar8_full$P1
+
+st_geometry(res_mar8_reduced) <- NULL
+st_geometry(res_mar8_full) <- NULL
+
+res_mar8 <- 
+  rbind(res_mar8_reduced %>% select(hex_id, P1, P1_mar8_locked_down),
+        res_mar8_full %>% select(hex_id, P1, P1_mar8_locked_down))
+
+hex_pop_lockdown <- 
+  data.frame(hex_id = hex_ita_1km.sf$hex_id,
+             P1 = hex_ita_1km.sf$P1)
+
+hex_pop_lockdown$P1_feb23_lockdown <- 
+  res_feb23$P1_feb23_locked_down[match(hex_pop_lockdown$hex_id, 
+                                       res_feb23$hex_id)]
+
+hex_pop_lockdown$P1_mar8_lockdown <- 
+  res_mar8$P1_mar8_locked_down[match(hex_pop_lockdown$hex_id, 
+                                     res_mar8$hex_id)]
+
+hex_pop_lockdown$P1[
+  is.na(hex_pop_lockdown$P1)] <- 0
+
+hex_pop_lockdown$P1_feb23_lockdown[
+  is.na(hex_pop_lockdown$P1_feb23_lockdown)] <- 0
+
+hex_pop_lockdown$P1_mar8_lockdown[
+  is.na(hex_pop_lockdown$P1_mar8_lockdown)] <- 0
+
+save(hex_pop_lockdown, file = "hex_pop_lockdown.Data")
+```
+
+```{r}
+hex_pop_lockdown$P1_feb23_lockdown.perc <- 
+  hex_pop_lockdown$P1_feb23_lockdown /
+  hex_pop_lockdown$P1
+
+hex_pop_lockdown$P1_mar8_lockdown.perc <- 
+  hex_pop_lockdown$P1_mar8_lockdown /
+  hex_pop_lockdown$P1
+
+hex_ita_1km.sf$P1_feb23_lockdown.perc <-
+  hex_pop_lockdown$P1_feb23_lockdown.perc[match(
+    hex_ita_1km.sf$hex_id, 
+    hex_pop_lockdown$hex_id
+  )]
+
+hex_ita_1km.sf$P1_mar8_lockdown.perc <-
+  hex_pop_lockdown$P1_mar8_lockdown.perc[match(
+    hex_ita_1km.sf$hex_id, 
+    hex_pop_lockdown$hex_id
+  )]
+
+ggplot(hex_ita_1km.sf) +
+  geom_sf(aes(fill = P1_feb23_lockdown.perc), colour = NA) +
+  scale_fill_viridis() + theme_bw()
+
+ggplot(hex_ita_1km.sf) +
+  geom_sf(aes(fill = P1_mar8_lockdown.perc), colour = NA) +
+  scale_fill_viridis() + theme_bw()
+```
+

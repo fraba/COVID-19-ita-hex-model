@@ -3,6 +3,11 @@ title: "Model"
 output: html_document
 ---
 
+Key columns: 
+* `hex_id`: integer
+* `day`: Date
+* `CODREG`: numeric
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -13,16 +18,27 @@ library(tidyr)
 library(zoo)
 library(viridis)
 library(gridExtra)
+library(spdep)
+library(parallel)
+library(broom)
+library(dotwhisker)
 ```
 
 ```{r}
 load("../grid/hex_ita_10km.sf.RData")
 load("../air_quality/airquality.df.RData")
 load("../dead/hex_dead.df.RData")
+load("../covid-cases-prov/reg_testing.df.RData")
+load("../locked-down-comune/hex_pop_lockdown.RData")
+load("../pop_density/pop_densities.df.RData")
+
+# hex_ita_10km.sf <- hex_ita_1km.sf
+
 ```
 
+# Variables
 
-# Model dependent variable
+## Dependent variable
 
 ```{r}
 m <- 
@@ -34,16 +50,22 @@ names(m) <- c("hex_id","year","day")
 hex_dead.df <- merge(hex_dead.df, m, by = c("hex_id","year","day"), all.y = T)
 hex_dead.df$Freq[is.na(hex_dead.df$Freq)] <- 0
 
+hex_dead.df$bin_pop_out_lockdown <- 
+  
+
 hex_dead.df <-
   hex_dead.df %>%
   dplyr::group_by(hex_id, year) %>%
   dplyr::arrange(day) %>%
-  dplyr::mutate(ma14 = rollmean(Freq, 14, align = 'right', fill = NA))
+  dplyr::mutate(dead_ma7 = 
+                  rollmean(Freq, 7, align = 'center', fill = NA),
+                dead_ma7_lag4 = 
+                  c(rep(NA, 4), rollmean(Freq, 7, align = 'right', fill = NA)[1:(length(Freq)-4)]))
 
 hex_dead_wide.df <- 
   hex_dead.df %>%
-  dplyr::select(-Freq) %>%
-  tidyr::pivot_wider(names_from = year, values_from = ma14)
+  dplyr::select(-Freq, -dead_ma7_lag4) %>%
+  tidyr::pivot_wider(names_from = year, values_from = dead_ma7)
 
 hex_dead_wide.df$sd_15_19 <- 
   apply(hex_dead_wide.df[,3:7], 1, FUN = sd)
@@ -53,10 +75,353 @@ hex_dead_wide.df$dist_sd <-
   (hex_dead_wide.df$M_20 - 
      hex_dead_wide.df$mean_15_19) /
   hex_dead_wide.df$sd_15_19 
+
+hex_dead_wide.df$dist_sd[is.nan(hex_dead_wide.df$dist_sd)] <- 0
+
+hex_dead_wide.df <-
+  hex_dead_wide.df %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::arrange(day) %>%
+  mutate(dist_sd_diff14 = c(dist_sd[14:length(dist_sd)], rep(NA, 13)))
+
+model_vars.df <- 
+  hex_dead_wide.df[,c('hex_id', 'day', 'dist_sd_diff14')]
+
+model_vars.df$hex_id <- as.integer(model_vars.df$hex_id)
+model_vars.df$day <- as.Date(paste0(model_vars.df$day,"-2020"), "%m%d-%Y")
+
+hex_dead_wide.df <- 
+  hex_dead.df %>%
+  dplyr::select(-Freq, -dead_ma7) %>%
+  tidyr::pivot_wider(names_from = year, values_from = dead_ma7_lag4)
+
+hex_dead_wide.df$sd_15_19 <- 
+  apply(hex_dead_wide.df[,3:7], 1, FUN = sd)
+hex_dead_wide.df$mean_15_19 <- 
+  apply(hex_dead_wide.df[,3:7], 1, FUN = mean)
+hex_dead_wide.df$dist_sd <- 
+  (hex_dead_wide.df$M_20 - 
+     hex_dead_wide.df$mean_15_19) /
+  hex_dead_wide.df$sd_15_19 
+
+hex_dead_wide.df$dist_sd[is.nan(hex_dead_wide.df$dist_sd)] <- 0
+
+hex_dead_wide.df <-
+  hex_dead_wide.df %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::arrange(day) %>%
+  mutate(dist_sd_lag4_diff14 = c(dist_sd[14:length(dist_sd)], rep(NA, 13)))
+
+hex_dead_wide.df$hex_id <- 
+  as.integer(hex_dead_wide.df$hex_id)
+hex_dead_wide.df$day <- 
+  as.Date(paste0(hex_dead_wide.df$day,"-2020"), "%m%d-%Y")
+
+model_vars.df <- 
+  merge(model_vars.df, 
+        hex_dead_wide.df %>% select(hex_id, day, dist_sd_lag4_diff14), 
+        by = c("hex_id", "day"))
+
+model_vars.df <- 
+  model_vars.df %>% filter(day < as.Date("2020-03-16"))
+
+```
+
+## Imputation
+
+```{r}
+model_vars.df$dist_sd_diff14[
+  is.infinite(model_vars.df$dist_sd_diff14)] <- 0
+model_vars.df$dist_sd_lag4_diff14[
+  is.infinite(model_vars.df$dist_sd_lag4_diff14)] <- 0
+
+ggplot(model_vars.df %>% filter(hex_id == 1000), aes(x=day)) + 
+  geom_line(aes(y=dist_sd_diff14), colour = 'red') +
+  geom_line(aes(y=dist_sd_lag4_diff14), colour = 'blue')
+
 ```
 
 
-```{r, fig.width = 10, fig.height = 40}
+## Air quality
+
+```{r}
+names(airquality.df)[2] <- "day"
+airquality_spread.df <- 
+  airquality.df %>% spread(var, value)
+
+airquality_spread.df <- 
+  airquality_spread.df %>%
+  select(-pmwf_conc, -ecwb_conc, -ecff_conc)
+
+model_vars.df <- 
+  merge(model_vars.df, airquality_spread.df, by = c("hex_id","day"), all.x = T)
+```
+
+
+## Census
+
+```{r}
+# model_vars.df <- 
+hex_ita_10km.df <- hex_ita_1km.sf
+st_geometry(hex_ita_10km.df) <- NULL
+  
+model_vars.df <- 
+  merge(model_vars.df, 
+         hex_ita_10km.df, 
+        by = "hex_id" ) %>%
+  filter(!is.na(P1))
+
+model_vars.df$CODREG <- as.numeric(model_vars.df$CODREG)
+
+model_vars.df <-
+  model_vars.df %>%
+  mutate(pop_over_74 = P29,
+         pop_under_74 = P1 - P29,
+         perc_over_74 = P29 / P1,
+         perc_families_over_4 = (PF5 + PF6 + PF8) / PF1,
+         perc_work_outside_comune = P138 / P1)
+
+model_vars.df$perc_families_over_4[
+  is.na(model_vars.df$perc_families_over_4)] <- 0
+
+model_vars.df$sum_employees[
+  is.na(model_vars.df$sum_employees)] <- 0
+
+```
+
+
+## Testing
+
+```{r}
+reg_testing.df$case_test_ratio <- 
+  reg_testing.df$cases_ma7 / reg_testing.df$tests_ma7
+
+ggplot(reg_testing.df, aes(x=date, y=case_test_ratio)) +
+  geom_line() +
+  facet_wrap(denominazione_regione~.)
+
+model_vars.df <- 
+  merge(model_vars.df, reg_testing.df, 
+        by.x = c("CODREG", "day"), 
+        by.y = c("codice_regione", "date"))
+
+```
+
+## Lock Down
+
+```{r}
+
+# hex_pop_lockdown$P1_mar8_lockdown <- hex_pop_lockdown$P1_mar9_lockdown
+
+hex_pop_lockdown$perc_feb23 <-
+  hex_pop_lockdown$P1_feb23_lockdown / hex_pop_lockdown$P1
+
+hex_pop_lockdown$perc_mar8 <-
+  hex_pop_lockdown$P1_mar8_lockdown / hex_pop_lockdown$P1
+
+hex_pop_lockdown$perc_feb23[is.nan(hex_pop_lockdown$perc_feb23)] <- 0
+hex_pop_lockdown$perc_mar8[is.nan(hex_pop_lockdown$perc_mar8)] <- 0
+
+model_vars.df$perc_pop_lockdown <- 0
+model_vars.df$perc_pop_lockdown[model_vars.df$day>as.Date("2020-03-09")] <- 1
+
+days_lockdown1 <- 
+  seq(as.Date("2020-02-23"),
+      as.Date("2020-03-07"),
+      by = "day")
+
+days_lockdown2 <- 
+  seq(as.Date("2020-03-08"),
+      as.Date("2020-03-09"),
+      by = "day")
+
+for (this_hex_id in unique(hex_pop_lockdown$hex_id[
+  hex_pop_lockdown$perc_feb23>0])) {
+  this_perc <- 
+    hex_pop_lockdown$perc_feb23[hex_pop_lockdown$hex_id == this_hex_id]
+  for (i in 1:length(days_lockdown1)) {
+    model_vars.df$perc_pop_lockdown[
+      model_vars.df$hex_id == this_hex_id &
+        model_vars.df$day == days_lockdown1[i]] <- 
+      this_perc
+  }
+}
+
+for (this_hex_id in unique(hex_pop_lockdown$hex_id[
+  hex_pop_lockdown$perc_mar8>0])) {
+  this_perc <- 
+    hex_pop_lockdown$perc_mar8[hex_pop_lockdown$hex_id == this_hex_id]
+  for (i in 1:length(days_lockdown2)) {
+    model_vars.df$perc_pop_lockdown[
+      model_vars.df$hex_id == this_hex_id &
+        model_vars.df$day == days_lockdown2[i]] <- 
+      this_perc
+  }
+}
+
+model_vars.df %>% 
+  group_by(day) %>% 
+  summarize(ld = sum(perc_pop_lockdown>0)) %>%
+  ggplot(aes(x=day,y=ld)) +
+  geom_bar(stat='identity')
+
+model_vars.df$perc_pop_out_lockdown <- 
+  1 - model_vars.df$perc_pop_lockdown
+
+model_vars.df$bin_pop_out_lockdown <- 
+  ifelse(model_vars.df$perc_pop_out_lockdown < .5,
+         0, 1)
+
+model_vars.df %>% 
+  group_by(day) %>% 
+  summarize(ld = sum(perc_pop_out_lockdown>.5)) %>%
+  ggplot(aes(x=day,y=ld)) +
+  geom_bar(stat='identity')
+
+model_vars.df %>% 
+  group_by(day) %>% 
+  summarize(ld = sum(bin_pop_out_lockdown)) %>%
+  ggplot(aes(x=day,y=ld)) +
+  geom_bar(stat='identity')
+
+```
+
+
+# Neighbours
+
+```{r}
+hex_ita_10km.nb <- 
+  poly2nb(hex_ita_10km.sf %>% filter(CODREG == 3), 
+                           queen=TRUE)
+coords <- 
+  st_coordinates(st_centroid(st_geometry(hex_ita_10km.sf %>% filter(CODREG == 3))))
+
+plot(st_geometry(hex_ita_10km.sf %>% filter(CODREG == 3)), border="grey")
+plot(hex_ita_10km.nb, coords, col="red", add = TRUE)
+
+hex_ita_10km.nb <- 
+  poly2nb(hex_ita_10km.sf, queen=TRUE)
+
+all_days <- unique(model_vars.df$day)
+
+funNeigh1 <- function(i, hex_ita_10km.nb, all_days, model_vars.df) {
+  res.df <- data.frame()
+  these_neigh <- hex_ita_10km.nb[[i]]
+  for (j in 1:length(all_days)) {
+    this.df <- 
+      model_vars.df[model_vars.df$day == all_days[j] &
+                      model_vars.df$hex_id %in% these_neigh,
+                    c("dist_sd_diff14", 
+                      "perc_pop_out_lockdown",
+                      "P1")]
+    res.df <- rbind(res.df, 
+                    data.frame(hex_id = i,
+                               day = all_days[j],
+                               neigh_weighted_mean = 
+                                 weighted.mean(this.df$dist_sd_diff14,
+                                               w = this.df$perc_pop_out_lockdown * this.df$P1)))
+  }
+  return(res.df)
+}
+
+cl <- makeCluster(10)
+neigh.list <- 
+  parLapply(cl, hex_ita_10km.df$hex_id, funNeigh1, 
+            hex_ita_10km.nb, all_days, model_vars.df)
+neigh.df <- bind_rows(neigh.list)
+stopCluster(cl)
+
+neigh.df$neigh_weighted_mean[is.nan(neigh.df$neigh_weighted_mean)] <- 0
+
+model_vars.df <- 
+  merge(model_vars.df, 
+        neigh.df,
+        by = c("hex_id","day"))
+```
+
+# Density
+
+```{r}
+model_vars.df$median_density_km2 <-
+  pop_densities.df$median_density_km2[match(model_vars.df$hex_id,
+                                            pop_densities.df$hex_id)]
+
+model_vars.df$gini_over74 <-
+  pop_densities.df$gini_over74[match(model_vars.df$hex_id,
+                                            pop_densities.df$hex_id)]
+
+```
+
+
+# Modelling
+
+
+```{r}
+hex_wt_missing_value <- 
+  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_diff14)])
+
+hex_wt_missing_value <- 
+  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_lag4_diff14)])
+```
+
+
+```{r}
+model_vars_std.df <-
+  model_vars.df %>%
+  dplyr::select(hex_id, day, perc_pop_lockdown,
+                dist_sd_diff14, dist_sd_lag4_diff14, neigh_weighted_mean,
+        median_density_km2, gini_over74, 
+        pm2p5_conc, pm10_conc, dust, no_conc, 
+        P1, perc_over_74, pop_over_74, perc_work_outside_comune, 
+        perc_families_over_4, 
+        sum_employees, 
+        case_test_ratio) %>%
+  dplyr::mutate_at(vars(dist_sd_diff14:case_test_ratio), scale)
+
+model_vars_std.df$day_num <- 
+  as.numeric(model_vars_std.df$day - as.Date("2020-02-24"))
+
+pooled <- 
+  lm(dist_sd_diff14 ~ 
+       dist_sd_lag4_diff14 *
+       neigh_weighted_mean *
+       perc_pop_lockdown +
+       median_density_km2 +  
+       pm2p5_conc + pm10_conc + no_conc +
+       perc_over_74 + gini_over74 + 
+       perc_work_outside_comune +
+       perc_families_over_4 + 
+       sum_employees + 
+       case_test_ratio + day_num, 
+     data=model_vars_std.df)
+```
+
+
+```{r}
+tidy(pooled) %>% 
+  filter(!grepl('^perc_pop_lockdown$|^dist_sd_lag4_diff14:perc_pop_lockdown$|^neigh_weighted_mean:perc_pop_lockdown$', term)) %>%
+  dwplot() %>% 
+  relabel_predictors(c(dist_sd_lag4_diff14 = "past excess mortality",
+                       neigh_weighted_mean = "nearby exces mortality",
+                       median_density_km2 = "median density",
+                       pm2p5_conc = "PM2.5 concentration",
+                       pm10_conc = "PM10 concentration",
+                       no_conc = "nitrogen dioxide concentration",
+                       perc_over_74 = "perc. over 74",
+                       gini_over74 = "over 74 concetration",
+                       perc_work_outside_comune = "perc. working out of comune",
+                       perc_families_over_4 = "perc. families over 4",
+                       sum_employees = "num. employees",
+                       case_test_ratio = "cases vs tests ratio",
+                       day_num = "days since 24 Feb",
+                       `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near exces mortality",
+                       `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near exces mortality X lockdown")) +
+  labs(x="Effects (above zero is positive) on present excess mortality for males over 70") +
+  theme_bw()
+```
+
+
+```{r, fig.width = 10, fig.height = 40, eval = FALSE}
 all_days <- unique(hex_dead_wide.df$day[!is.na(hex_dead_wide.df$M_20)])
 
 region.sf <- 
@@ -85,7 +450,6 @@ plot.list <- lapply(all_days, funPlot)
 do.call("grid.arrange", c(plot.list, ncol=6))
 ```
 
-
 ```{r animation, eval = F}
 
 region.sf <- 
@@ -98,7 +462,7 @@ funPlotGif <- function(day) {
   hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
                                                  this_dat$hex_id)]
     hex_ita_1km.sf$value_cut <- cut(hex_ita_1km.sf$value, 
-                                  breaks = rev(c(-128,-50,-10,-5,-2, 2,5,10,50,128)),
+                                  breaks = rev(c(-128,-50,-25,-10,-5,-2, 2,5,10,25,50,128)),
                                   include.lowest = T)
     
     hex_ita_1km.sf$value_cut <- factor(hex_ita_1km.sf$value_cut,
@@ -106,13 +470,13 @@ funPlotGif <- function(day) {
     
   return(ggplot() +
            geom_sf(data = hex_ita_1km.sf, aes(fill = value_cut), colour = NA) +
-           scale_fill_brewer(palette = "Spectral", direction = -1, drop = FALSE) +
+           scale_fill_brewer(palette = "Spectral", direction = 1, drop = FALSE) +
            geom_sf(data = region.sf, fill = NA, size = .2) +
            geom_sf(data = province.sf, fill = NA, size = .1) +
            theme_bw() +
            theme(axis.text = element_blank(),
                  axis.ticks = element_blank(),
-                 legend.position = c(.8,.75)) +
+                 legend.position = c(.9,.75)) +
            labs(caption = paste0(as.Date(paste0("2020", day), format = "%Y%m%d"), "    (right-aligned 14-day m.a.)"),
                 fill = "Difference in SD\nfrom 2015-19 mean",
                 title = "Number of deaths (every cause): 2020 / 2015-19 difference") +
@@ -126,5 +490,6 @@ for (i in 1:length(plot.list)) {
   file_name = sprintf("tiff/%02d.tiff", i)
   ggsave(filename = file_name, plot.list[[i]])
 }
+ffmpeg -i output.mpeg -c:v libx264 -strict -2 output.mp4
 ```
 

@@ -20,16 +20,16 @@ ita_buffer.sf <-
   st_combine() %>%
   st_buffer(1000)
 
-hex_ita_1km.sf <- 
+hex_ita_10km.sf <- 
   st_make_grid(ita_buffer.sf,
                cellsize = 10000, 
                square = FALSE) %>%
   st_sf(hex_id = 0)
-hex_ita_1km.sf$hex_id <- 1:nrow(hex_ita_1km.sf)
+hex_ita_10km.sf$hex_id <- 1:nrow(hex_ita_10km.sf)
 ```
 
 ```{r}
-ggplot(hex_ita_1km.sf) + geom_sf()
+ggplot(hex_ita_10km.sf) + geom_sf()
 ```
 
 ## Intersect with census sections
@@ -43,7 +43,7 @@ res_sez_2011 <-
   st_intersects(
     sez2011_centroids.sf %>% 
       st_transform(32632), 
-    hex_ita_1km.sf)
+    hex_ita_10km.sf)
 is.na(res_sez_2011) <- lengths(res_sez_2011) == 0
 
 sez2011_centroids.sf$hex_id <- unlist(res_sez_2011)
@@ -72,8 +72,8 @@ hex_population.df <-
   dplyr::mutate_at(vars(P1:E31), sum, na.rm = TRUE) %>%
   dplyr::distinct()
 
-hex_ita_1km.sf <-
-  merge(hex_ita_1km.sf, 
+hex_ita_10km.sf <-
+  merge(hex_ita_10km.sf, 
         hex_population.df, 
         by = "hex_id",
         all.x = T)
@@ -98,8 +98,8 @@ hex_industry.df <-
   )
 
 
-hex_ita_1km.sf <-
-  merge(hex_ita_1km.sf, 
+hex_ita_10km.sf <-
+  merge(hex_ita_10km.sf, 
         hex_industry.df, 
         by = "hex_id",
         all.x = T)
@@ -107,11 +107,11 @@ hex_ita_1km.sf <-
 
 
 ```{r}
-ggplot(hex_ita_1km.sf) +
+ggplot(hex_ita_10km.sf) +
   geom_sf(aes(fill = P1)) +
   scale_fill_viridis()
 
-ggplot(hex_ita_1km.sf) +
+ggplot(hex_ita_10km.sf) +
   geom_sf(aes(fill = sum_employees)) +
   scale_fill_viridis()
 ```
@@ -119,6 +119,6 @@ ggplot(hex_ita_1km.sf) +
 ## Save
 
 ```{r}
-save(hex_ita_1km.sf, file = "hex_ita_1km.sf.RData")
+save(hex_ita_10km.sf, file = "hex_ita_10km.sf.RData")
 ```
 
