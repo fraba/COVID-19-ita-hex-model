@@ -1,0 +1,42 @@
+---
+title: "Hotel rooms"
+output: github_document
+---
+
+```{r}
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+load("../grid/hex_ita_10km.sf.RData")
+st_crs(hex_ita_10km.sf) <- st_crs(32632)
+
+dat <- 
+  read.csv("DCSC_TUR_17062020083534877.csv") %>%
+  dplyr::filter(TIPO_DATO7 == "BEDS" &
+                  grepl("\\d{6}", ITTER107))
+
+italy.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012019/Com01012019/Com01012019_WGS84.shp")
+
+italy.sf$beds <- 
+  dat$Value[match(italy.sf$PRO_COM_T, dat$ITTER107)]
+
+sum(is.na(italy.sf$beds)) 
+
+italy.sf$beds[is.na(italy.sf$beds)] <- 0 # Imputation
+
+italy_sample.sf <- 
+  st_sample(italy.sf, size = italy.sf$beds)
+
+hex_beds.df <- 
+     as.data.frame(table(unlist(st_within(italy_sample.sf, 
+                                          hex_ita_10km.sf))))
+
+colnames(hex_beds.df) <- 
+  c("hex_id", "hotel_beds")
+
+save(hex_beds.df, file = "hex_beds.df.RData")
+```
+
+
