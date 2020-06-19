@@ -22,6 +22,7 @@ library(spdep)
 library(parallel)
 library(broom)
 library(dotwhisker)
+library(knitr)
 ```
 
 ```{r}
@@ -362,9 +363,21 @@ model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
 
 ```
 
+# Cases of Death (Provincial level, 2017)
+
+```{r}
+load("../cause-death-prov-2017/hex_cause_death_prov_2017.df.RData")
+
+model_vars.df <- 
+  merge(model_vars.df, 
+        hex_cause_death_prov_2017.df %>%
+            dplyr::select(-PROVINCIA_2017, -ITTER107),
+        by = "hex_id",
+        all.x = T)
+```
+
 
 # Modelling
-
 
 ```{r}
 hex_wt_missing_value <- 

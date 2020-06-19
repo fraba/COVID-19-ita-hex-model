@@ -1,0 +1,107 @@
+---
+title: "Cause of Death provincial level 2017"
+output: github_document
+---
+
+
+```{r warning=F}
+require(sf)
+require(dplyr)
+require(tidyr)
+require(ggplot2)
+require(knitr)
+
+load("../grid/hex_ita_10km.sf.RData")
+st_crs(hex_ita_10km.sf) <- st_crs(32632)
+
+# Underlying cause of death - European Short List
+read.csv("../cause-death-prov-2017/DCIS_CMORTE1_RES_19062020025140069.csv") %>%
+  distinct(CAUSEMORTE_SL,
+           Causa.iniziale.di.morte...European.Short.List) %>%
+  kable()
+```
+
+
+```{r}
+dat_cause_death_prov_2017 <-
+  read.csv("DCIS_CMORTE1_RES_19062020025140069.csv") %>%
+  dplyr::filter(grepl("IT([A-Z])?\\d{2,3}|ITC4A|ITE1A|ITC4B", ITTER107) &
+                  Sesso == "totale" & 
+                  TIPO_DATO15 == "MRATE") %>%
+  dplyr::select(ITTER107, Territorio, 
+                CAUSEMORTE_SL, Value) %>%
+  tidyr::pivot_wider(names_from = CAUSEMORTE_SL, 
+                     values_from = Value,
+                     names_prefix = "cause_death_")
+```
+
+```{r, eval=F}
+italy.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012017_g/ProvCM01012017_g/ProvCM01012017_g_WGS84.shp") %>%
+  sf::st_make_valid()
+
+hex_ita_10km.sf$PROVINCIA_2017 <- NA
+
+for (i in hex_ita_10km.sf$hex_id) {
+  print(i)
+  this_res <- 
+    st_intersection(italy.sf, 
+                    hex_ita_10km.sf[i,])
+  if(nrow(this_res) == 0) next
+  hex_ita_10km.sf$PROVINCIA_2017[i] <-
+    this_res$DEN_PCM[which.max(st_area(this_res))]
+}
+
+hex_cause_death_prov_2017.df <-
+  data.frame(
+    hex_id = hex_ita_10km.sf$hex_id,
+    PROVINCIA_2017 = hex_ita_10km.sf$PROVINCIA_2017,
+    stringsAsFactors = F
+  )
+
+hex_cause_death_prov_2017.df$PROVINCIA_2017[
+  hex_cause_death_prov_2017.df$PROVINCIA_2017 ==
+    "Aosta"] <- 
+  "Valle d'Aosta / Vallée d'Aoste"
+hex_cause_death_prov_2017.df$PROVINCIA_2017[
+  hex_cause_death_prov_2017.df$PROVINCIA_2017 ==
+    "Massa Carrara"] <- 
+  "Massa-Carrara"
+hex_cause_death_prov_2017.df$PROVINCIA_2017[
+  hex_cause_death_prov_2017.df$PROVINCIA_2017 ==
+    "Forli'-Cesena"] <- 
+  "Forlì-Cesena"
+hex_cause_death_prov_2017.df$PROVINCIA_2017[
+  hex_cause_death_prov_2017.df$PROVINCIA_2017 ==
+    "Bolzano"] <- 
+  "Bolzano / Bozen"
+
+save(hex_cause_death_prov_2017.df, 
+     file = "hex_cause_death_prov_2017.df.RData")
+```
+
+```{r eval = FALSE}
+load("hex_cause_death_prov_2017.df.RData")
+
+hex_cause_death_prov_2017.df <- 
+  merge(hex_cause_death_prov_2017.df, 
+        dat_cause_death_prov_2017, 
+        by.x = "PROVINCIA_2017",
+        by.y = "Territorio",
+        all.x = T)
+
+save(hex_cause_death_prov_2017.df, 
+     file = "hex_cause_death_prov_2017.df.RData")
+```
+
+
+```{r}
+load("hex_cause_death_prov_2017.df.RData")
+
+ggplot(merge(hex_ita_10km.sf,
+        hex_cause_death_prov_2017.df, 
+        by = "hex_id")) +
+  geom_sf(aes(fill = cause_death_17_1_1), 
+          colour = NA)
+```
+
