@@ -32,10 +32,17 @@ load("../dead/hex_dead.df.RData")
 load("../covid-cases-prov/reg_testing.df.RData")
 load("../locked-down-comune/hex_pop_lockdown.RData")
 load("../pop_density/pop_densities.df.RData")
-
-hex_ita_10km.sf <- hex_ita_1km.sf
-
 ```
+
+```{r}
+# Region misconding
+
+hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Abruzzo"] <- '13'
+hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Basilicata"] <- '17'
+hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Emilia-Romagna"] <- '8'
+hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Liguria"] <- '7'
+```
+
 
 # Variables
 
@@ -377,6 +384,84 @@ model_vars.df <-
 ```
 
 
+# Hotel rooms 
+
+```{r}
+load("../hotel-comune/hex_beds.df.RData")
+
+model_vars.df$hotel_beds <- 
+  hex_beds.df$hotel_beds[match(model_vars.df$hex_id,
+                               hex_beds.df$hex_id)]
+
+model_vars.df$hotel_beds[is.na(model_vars.df$hotel_beds)] <- 0
+```
+
+
+# Smokers
+
+```{r}
+cod_reg.df <- 
+  data.frame(CODREG = hex_ita_10km.sf$CODREG,
+             REGIONE = hex_ita_10km.sf$REGIONE,
+             stringsAsFactors = F) %>%
+  dplyr::distinct(CODREG, REGIONE) %>%
+  dplyr::filter(!is.na(CODREG)) %>%
+  dplyr::arrange(REGIONE)
+
+dat_smokers <- 
+  read.csv("../smokers/DCCV_AVQ_PERSONE_19062020060907198.csv") %>%
+  dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
+                  !ITTER107 %in% c("ITFG","ITCD","ITD1","ITD2") & 
+                  Tipo.dato == "fumatori" &
+                  Misura == "per 100 persone con le stesse caratteristiche" &
+                  TIME == 2019) %>%
+  dplyr::arrange(Territorio)
+
+dat_smokers$CODREG <- 
+  as.numeric(cod_reg.df$CODREG)
+
+model_vars.df$smokers <- 
+  dat_smokers$Value[match(model_vars.df$CODREG, dat_smokers$CODREG)]
+
+```
+
+# Health status
+
+```{r}
+dat_health_status <- 
+  read.csv("../healt_status_reg/DCCV_AVQ_PERSONE_19062020065748989.csv") %>%
+    dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
+                  !ITTER107 %in% c("ITFG","ITCD","ITD1","ITD2") & 
+                  Misura == "per 100 persone con le stesse caratteristiche" &
+                  TIME == 2018) %>%
+  dplyr::select(-Tipo.dato, -Misura, -TIME, -Seleziona.periodo, 
+                -Flag.Codes, -Flags, -MISURA_AVQ) %>%
+  tidyr::pivot_wider(names_from = TIPO_DATO_AVQ, values_from = Value)
+
+dat_health_status$CODREG <- 
+  dat_smokers$CODREG[match(dat_health_status$ITTER107, dat_smokers$ITTER107)]
+
+colnames(dat_health_status) <- 
+  gsub("0_", "", colnames(dat_health_status))
+
+model_vars.df <- 
+  merge(model_vars.df,
+        dat_health_status %>% dplyr::select(-ITTER107, -Territorio), 
+        by = "CODREG")
+```
+
+```{r}
+dat_icu <- 
+  read.csv("../icu/C_17_dataset_96_0_upFile.csv",
+           sep=";", fileEncoding = "ISO-8859-1") %>%
+  dplyr::filter(Descrizione.disciplina == "TERAPIA INTENSIVA                       ")
+  
+
+sum(!dat_icu$Codice.Comune %in% sprintf("%06d", as.numeric(hex_ita_1km.sf$PROCOM)))
+
+```
+
+
 # Modelling
 
 ```{r}
@@ -395,6 +480,11 @@ model_vars_std.df <-
                 dist_sd_diff14, dist_sd_lag4_diff14, neigh_weighted_mean,
         median_density_km2, gini_over74, 
         no_conc, o3_conc, sia_conc, nmvoc_conc, pm2p5_conc, pm10_conc, co_conc, no2_conc, so2_conc,
+        cause_death_8, cause_death_7, cause_death_2_1_10, 
+        cause_death_2_1_4, cause_death_2_1_8, 
+        CHRONIC_DIAB, CHRONIC_HYP, CHRONIC_BRONC, CHRONIC_ALLER,
+        smokers,
+        hotel_beds,
         P1, perc_over_65, pop_over_65, perc_work_outside_comune, 
         perc_employed, perc_unemployed, perc_degree_over_workforce,
         perc_families_over_4, 
@@ -413,6 +503,11 @@ pooled <-
        median_density_km2 +  
        pm2p5_conc + pm10_conc + no_conc + o3_conc + nmvoc_conc + sia_conc +
        co_conc + no2_conc + so2_conc +
+       cause_death_8 + cause_death_7 + cause_death_2_1_10 + 
+       cause_death_2_1_4 + cause_death_2_1_8 +
+       CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER +
+       smokers +
+       hotel_beds + 
        perc_over_65 + gini_over74 + 
        perc_work_outside_comune +
        perc_families_over_4 + 
@@ -439,6 +534,17 @@ tidy(pooled) %>%
                       co_conc = "carbon monoxide conc.",
                       no2_conc = "nitrogen dioxide conc.",
                       so2_conc = "sulphur dioxide",
+                      cause_death_8 = "cause death: respiratory (prov.)",
+                      cause_death_7 = "cause death: circulatory (prov.)",
+                      cause_death_2_1_10 = "cause death: breast cancer (prov.)",
+                      cause_death_2_1_4 = "cause death: colorectal cancer (prov.)",
+                      cause_death_2_1_8 = "cause death: lung cancer (prov.)",
+                      CHRONIC_DIAB = "perc. diabetes (reg.)",
+                      CHRONIC_HYP  = "perc. hypertension (reg.)", 
+                      CHRONIC_BRONC = "perc. bronchitis (reg.)", 
+                      CHRONIC_ALLER = "perc. allergies (reg.)",
+                      smokers = "perc. smokers (reg.)",
+                      hotel_beds = "n. hotel beds",
                       perc_employed = "perc. employed",
                       perc_degree_over_workforce = "perc. degree (over workforce)",
                        perc_over_65 = "perc. over 65",
@@ -446,7 +552,7 @@ tidy(pooled) %>%
                        perc_work_outside_comune = "perc. working out of comune",
                        perc_families_over_4 = "perc. families over 4",
                        sum_employees = "num. employees",
-                       case_test_ratio = "cases vs tests ratio",
+                       case_test_ratio = "cases vs tests ratio (reg.)",
                        day_num = "days since 24 Feb",
                        `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near exces mortality",
                        `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near excess mortality X lockdown")) +

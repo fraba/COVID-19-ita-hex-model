@@ -68,7 +68,7 @@ hex_population.df <-
   sez2011_population.df %>%
   dplyr::select(hex_id, CODREG:PROCOM, P1:E31) %>%
   dplyr::group_by(hex_id) %>%
-  dplyr::mutate_at(vars(CODREG:PROCOM), function(x) names(which.max(table(x)))) %>%
+  dplyr::mutate_at(vars(CODREG:PROCOM), function(x) names(which.max(table(x)))) %>% # This generate inconsistencies (e.g. regione vs CODREG)
   dplyr::mutate_at(vars(P1:E31), sum, na.rm = TRUE) %>%
   dplyr::distinct()
 

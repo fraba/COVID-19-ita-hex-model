@@ -1,0 +1,45 @@
+---
+title: "ICU beds"
+output: github_document
+---
+
+```{r }
+library(ggmap)
+library(dplyr)
+library(readr)
+
+dat_beds.df <- 
+  read_delim("C_17_dataset_96_0_upFile.csv", 
+    ";", escape_double = FALSE, locale = locale(encoding = "ISO-8859-1"), 
+    trim_ws = TRUE)
+  
+
+save(dat_beds.df, file = "dat_icu.df.RData")
+
+```
+
+```{r, eval=F}
+
+address_unique.df <-
+  dat_beds.df %>%
+  dplyr::distinct(Indirizzo, Comune) %>%
+  dplyr::mutate(lon = NA,
+                lat = NA)
+
+register_google(key = "")
+
+for (i in 1:nrow(address_unique.df)) {
+  print(i)
+  res <- 
+    geocode(paste0(address_unique.df$Indirizzo[i],
+                   ", ",
+                   address_unique.df$Comune[i]))
+  
+  address_unique.df$lon[i] <- res$lon
+  address_unique.df$lat[i] <- res$lat
+}
+
+save(address_unique.df, file = "address_unique.df.RData")
+
+```
+
