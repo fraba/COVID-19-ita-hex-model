@@ -7,6 +7,7 @@ output: github_document
 library(ggmap)
 library(dplyr)
 library(readr)
+library(sf)
 
 dat_beds.df <- 
   read_delim("C_17_dataset_96_0_upFile.csv", 
@@ -39,7 +40,63 @@ for (i in 1:nrow(address_unique.df)) {
   address_unique.df$lat[i] <- res$lat
 }
 
+address_unique.df$lon[address_unique.df$Indirizzo == "L.G.T. IN SASIA  3" &
+                        address_unique.df$Comune == "ROMA"] <- 12.462888
+address_unique.df$lat[address_unique.df$Indirizzo == "L.G.T. IN SASIA  3" &
+                        address_unique.df$Comune == "ROMA"] <- 41.900789
+
+address_unique.df$lon[address_unique.df$Indirizzo == "Loc Breyan, 1" &
+                        address_unique.df$Comune == "SAINT-PIERRE"] <- 7.241320
+address_unique.df$lat[address_unique.df$Indirizzo == "Loc Breyan, 1" &
+                        address_unique.df$Comune == "SAINT-PIERRE"] <- 45.718011
+
+address_unique.df$lon[address_unique.df$Indirizzo == "Loc Broyan, 1" &
+                        address_unique.df$Comune == "SAINT-PIERRE"] <- 7.241320
+address_unique.df$lat[address_unique.df$Indirizzo == "Loc Broyan, 1" &
+                        address_unique.df$Comune == "SAINT-PIERRE"] <- 45.718011  
+
+address_unique.df$lon[address_unique.df$Indirizzo == "Piazza Nicola Leotta" &
+                        address_unique.df$Comune == "PALERMO"] <- 13.358040
+address_unique.df$lat[address_unique.df$Indirizzo == "Piazza Nicola Leotta" &
+                        address_unique.df$Comune == "PALERMO"] <- 38.104623
+
+address_unique.df$lon[address_unique.df$Indirizzo == "Piazza Nicola Leotta" &
+                        address_unique.df$Comune == "PALERMO"] <- 13.358040
+address_unique.df$lat[address_unique.df$Indirizzo == "Piazza Nicola Leotta" &
+                        address_unique.df$Comune == "PALERMO"] <- 38.104623
+
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA   S. PASQUALE" &
+                        address_unique.df$Comune == "CASSINO"] <- 13.844242
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA   S. PASQUALE" &
+                        address_unique.df$Comune == "CASSINO"] <- 41.505370
+
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA DE GASPERI 1" &
+                        address_unique.df$Comune == "PAGANI"] <- 14.620875
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA DE GASPERI 1" &
+                        address_unique.df$Comune == "PAGANI"] <- 40.747160
+
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA FFAGGIANA 34" &
+                        address_unique.df$Comune == "LATINA"] <- 12.901674
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA FFAGGIANA 34" &
+                        address_unique.df$Comune == "LATINA"] <- 41.443205
+
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA M. MARINE 197" &
+                        address_unique.df$Comune == "PALERMO"] <-13.386485
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA M. MARINE 197" &
+                        address_unique.df$Comune == "PALERMO"] <- 38.106285
+
 save(address_unique.df, file = "address_unique.df.RData")
+
+```
+
+
+```{r}
+dat_beds.df <- 
+  merge(dat_beds.df, address_unique.df, by = c("Indirizzo", "Comune")) 
+
+dat_beds.sf <- 
+  st_as_sf(dat_beds.df, coords = c("lon", "lat"), crs = 4326)
+
 
 ```
 
