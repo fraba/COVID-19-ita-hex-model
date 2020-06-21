@@ -85,12 +85,24 @@ address_unique.df$lon[address_unique.df$Indirizzo == "VIA M. MARINE 197" &
 address_unique.df$lat[address_unique.df$Indirizzo == "VIA M. MARINE 197" &
                         address_unique.df$Comune == "PALERMO"] <- 38.106285
 
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA SAN F.SCO D'ASSISI, 194" &
+                        address_unique.df$Comune == "RUTIGLIANO"] <- 16.997626
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA SAN F.SCO D'ASSISI, 194" &
+                        address_unique.df$Comune == "RUTIGLIANO"] <- 41.008877
+
+address_unique.df$lon[address_unique.df$Indirizzo == "VIA S. F. HAHNEMANN" &
+                        address_unique.df$Comune == "BARI"] <- 16.888452
+address_unique.df$lat[address_unique.df$Indirizzo == "VIA S. F. HAHNEMANN" &
+                        address_unique.df$Comune == "BARI"] <- 41.097770
+
 save(address_unique.df, file = "address_unique.df.RData")
 
 ```
 
 
 ```{r}
+load("dat_icu.df.RData")
+
 dat_beds.df <- 
   merge(dat_beds.df, address_unique.df, by = c("Indirizzo", "Comune")) 
 
@@ -98,5 +110,6 @@ dat_beds.sf <-
   st_as_sf(dat_beds.df, coords = c("lon", "lat"), crs = 4326)
 
 
+ggplot(st_as_sf(address_unique.df, coords = c("lon", "lat"), crs = 4326)) + geom_sf(size = .05)
 ```
 
