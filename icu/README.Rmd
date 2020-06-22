@@ -8,6 +8,9 @@ library(ggmap)
 library(dplyr)
 library(readr)
 library(sf)
+```
+
+```{r, eval=F}
 
 dat_beds.df <- 
   read_delim("C_17_dataset_96_0_upFile.csv", 
@@ -16,10 +19,6 @@ dat_beds.df <-
   
 
 save(dat_beds.df, file = "dat_icu.df.RData")
-
-```
-
-```{r, eval=F}
 
 address_unique.df <-
   dat_beds.df %>%
@@ -96,12 +95,13 @@ address_unique.df$lat[address_unique.df$Indirizzo == "VIA S. F. HAHNEMANN" &
                         address_unique.df$Comune == "BARI"] <- 41.097770
 
 save(address_unique.df, file = "address_unique.df.RData")
-
 ```
 
 
 ```{r}
+load("../grid/hex_ita_10km.sf.RData")
 load("dat_icu.df.RData")
+load("address_unique.df.RData")
 
 dat_beds.df <- 
   merge(dat_beds.df, address_unique.df, by = c("Indirizzo", "Comune")) 
@@ -109,7 +109,40 @@ dat_beds.df <-
 dat_beds.sf <- 
   st_as_sf(dat_beds.df, coords = c("lon", "lat"), crs = 4326)
 
-
-ggplot(st_as_sf(address_unique.df, coords = c("lon", "lat"), crs = 4326)) + geom_sf(size = .05)
+ggplot(st_as_sf(address_unique.df, coords = c("lon", "lat"), crs = 4326)) + 
+  geom_sf(size = .05)
 ```
+
+
+```{r}
+st_crs(hex_ita_10km.sf) <- 32632
+
+dat_icu_beds.sf <-
+  dat_beds.sf %>%
+  dplyr::filter(`Descrizione disciplina` == "TERAPIA INTENSIVA")
+
+res <- 
+  unlist(st_within(dat_icu_beds.sf %>% 
+                     st_transform(32632), 
+                   hex_ita_10km.sf))
+
+dat_icu_beds.sf$hex_id <- res
+
+hex_icu_beds.df <- 
+  dat_icu_beds.sf %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarise(icu_beds = sum(`Totale posti letto`))
+
+st_geometry(hex_icu_beds.df) <- NULL
+
+hex_ita_10km.sf$icu_beds <- 
+  hex_icu_beds.df$icu_beds[match(hex_ita_10km.sf$hex_id,
+                                 hex_icu_beds.df$hex_id)]
+
+ggplot(hex_ita_10km.sf) + 
+  geom_sf(aes(fill = icu_beds), colour = NA)
+
+save(hex_icu_beds.df, file = "hex_icu_beds.df.RData")
+```
+
 
