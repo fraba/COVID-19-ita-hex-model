@@ -50,7 +50,7 @@ hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Liguria"] <- '7'
 
 ```{r}
 m <- 
-  expand.grid(hex_ita_1km.sf$hex_id, 
+  expand.grid(hex_ita_10km.sf$hex_id, 
               paste0("T_", 15:20), 
               unique(hex_dead.df$day))
 names(m) <- c("hex_id","year","day")
@@ -59,7 +59,7 @@ hex_dead.df <- merge(hex_dead.df, m, by = c("hex_id","year","day"), all.y = T)
 hex_dead.df$Freq[is.na(hex_dead.df$Freq)] <- 0
 
 # hex_dead.df$bin_pop_out_lockdown <- 
-  
+
 
 hex_dead.df <-
   hex_dead.df %>%
@@ -172,12 +172,12 @@ model_vars.df <-
 
 ```{r}
 # model_vars.df <- 
-hex_ita_10km.df <- hex_ita_1km.sf
+hex_ita_10km.df <- hex_ita_10km.sf
 st_geometry(hex_ita_10km.df) <- NULL
-  
+
 model_vars.df <- 
   merge(model_vars.df, 
-         hex_ita_10km.df, 
+        hex_ita_10km.df, 
         by = "hex_id" ) %>%
   filter(!is.na(P1))
 
@@ -308,7 +308,7 @@ model_vars.df %>%
 ```{r}
 hex_ita_10km.nb <- 
   poly2nb(hex_ita_10km.sf %>% filter(CODREG == 3), 
-                           queen=TRUE)
+          queen=TRUE)
 coords <- 
   st_coordinates(st_centroid(st_geometry(hex_ita_10km.sf %>% filter(CODREG == 3))))
 
@@ -364,13 +364,13 @@ model_vars.df$median_density_km2 <-
 
 model_vars.df$gini_over74 <-
   pop_densities.df$gini_over74[match(model_vars.df$hex_id,
-                                            pop_densities.df$hex_id)]
+                                     pop_densities.df$hex_id)]
 
 model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
 
 ```
 
-# Cases of Death (Provincial level, 2017)
+# Causes of Death (Provincial level, 2017)
 
 ```{r}
 load("../cause-death-prov-2017/hex_cause_death_prov_2017.df.RData")
@@ -378,7 +378,7 @@ load("../cause-death-prov-2017/hex_cause_death_prov_2017.df.RData")
 model_vars.df <- 
   merge(model_vars.df, 
         hex_cause_death_prov_2017.df %>%
-            dplyr::select(-PROVINCIA_2017, -ITTER107),
+          dplyr::select(-PROVINCIA_2017, -ITTER107),
         by = "hex_id",
         all.x = T)
 ```
@@ -430,7 +430,7 @@ model_vars.df$smokers <-
 ```{r}
 dat_health_status <- 
   read.csv("../healt_status_reg/DCCV_AVQ_PERSONE_19062020065748989.csv") %>%
-    dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
+  dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
                   !ITTER107 %in% c("ITFG","ITCD","ITD1","ITD2") & 
                   Misura == "per 100 persone con le stesse caratteristiche" &
                   TIME == 2018) %>%
@@ -450,15 +450,59 @@ model_vars.df <-
         by = "CODREG")
 ```
 
+# Icu beds
+
 ```{r}
-dat_icu <- 
-  read.csv("../icu/C_17_dataset_96_0_upFile.csv",
-           sep=";", fileEncoding = "ISO-8859-1") %>%
-  dplyr::filter(Descrizione.disciplina == "TERAPIA INTENSIVA                       ")
+library(igraph)
+load("../icu/hex_icu_beds.df.RData")
+
+hex_ita_10km.sf$icu_beds <- 0
+hex_ita_10km.sf$icu_beds <- 
+  hex_icu_beds.df$icu_beds[match(hex_ita_10km.sf$hex_id,
+                                 hex_icu_beds.df$hex_id)]
+hex_ita_10km.sf$icu_beds[is.na(hex_ita_10km.sf$icu_beds)] <- 0
+
+names(hex_ita_10km.nb) <- hex_ita_10km.sf$hex_id
+
+g <- 
+  graph_from_adj_list(
+    hex_ita_10km.nb[which(unlist(lapply(hex_ita_10km.nb, function(x)length(x)>0)))], 
+                      mode="all", 
+    duplicate=TRUE)
+
+neigh5 <- 
+  ego(g, order = 5, nodes = V(g))
+
+funNeighIcu <- function(i) {
+  hex_ids <- neigh5[[i]]
+  return(sum(hex_ita_10km.sf$icu_beds[hex_ids], na.rm = T) /
+    sum(hex_ita_10km.sf$P1[hex_ids], na.rm = T))
+}
+
+hex_ita_10km.sf$perc_neigh5_icu_beds <- 
+  sapply(hex_ita_10km.sf$hex_id, funNeighIcu)
+hex_ita_10km.sf$perc_neigh5_icu_beds[is.na(hex_ita_10km.sf$perc_neigh5_icu_beds)] <- 0
   
+model_vars.df$perc_neigh5_icu_beds <- 
+  hex_ita_10km.sf$perc_neigh5_icu_beds[match(model_vars.df$hex_id,
+                                             hex_ita_10km.sf$hex_id)]
 
-sum(!dat_icu$Codice.Comune %in% sprintf("%06d", as.numeric(hex_ita_1km.sf$PROCOM)))
+```
 
+# Income 
+
+```{r}
+load("../income/hex_income.df.RData")
+
+hex_income.df <- 
+  hex_income.df %>%
+  dplyr::mutate(perc_low_income = 
+                  ( X0 + X10000 ) /
+                  (X0 + X10000 + X15000 + X26000 + X55000 + X75000 + X120000 + X120000.))
+
+model_vars.df$perc_low_income <- 
+  hex_income.df$perc_low_income[match(model_vars.df$hex_id, 
+                                      hex_income.df$hex_id)]
 ```
 
 
@@ -478,18 +522,18 @@ model_vars_std.df <-
   model_vars.df %>%
   dplyr::select(hex_id, day, perc_pop_lockdown,
                 dist_sd_diff14, dist_sd_lag4_diff14, neigh_weighted_mean,
-        median_density_km2, gini_over74, 
-        no_conc, o3_conc, sia_conc, nmvoc_conc, pm2p5_conc, pm10_conc, co_conc, no2_conc, so2_conc,
-        cause_death_8, cause_death_7, cause_death_2_1_10, 
-        cause_death_2_1_4, cause_death_2_1_8, 
-        CHRONIC_DIAB, CHRONIC_HYP, CHRONIC_BRONC, CHRONIC_ALLER,
-        smokers,
-        hotel_beds,
-        P1, perc_over_65, pop_over_65, perc_work_outside_comune, 
-        perc_employed, perc_unemployed, perc_degree_over_workforce,
-        perc_families_over_4, 
-        sum_employees, 
-        case_test_ratio) %>%
+                median_density_km2, gini_over74, 
+                no_conc, o3_conc, sia_conc, nmvoc_conc, pm2p5_conc, pm10_conc, co_conc, no2_conc, so2_conc,
+                cause_death_8, cause_death_7, cause_death_2_1_10, 
+                cause_death_2_1_4, cause_death_2_1_8, 
+                CHRONIC_DIAB, CHRONIC_HYP, CHRONIC_BRONC, CHRONIC_ALLER,
+                smokers,
+                hotel_beds,
+                P1, perc_over_65, pop_over_65, perc_work_outside_comune, 
+                perc_employed, perc_unemployed, perc_degree_over_workforce,
+                perc_families_over_4, 
+                sum_employees, perc_low_income, 
+                perc_neigh5_icu_beds, case_test_ratio) %>%
   dplyr::mutate_at(vars(dist_sd_diff14:case_test_ratio), scale)
 
 model_vars_std.df$day_num <- 
@@ -512,8 +556,8 @@ pooled <-
        perc_work_outside_comune +
        perc_families_over_4 + 
        perc_employed + perc_degree_over_workforce +
-       sum_employees + 
-       case_test_ratio + day_num, 
+       sum_employees + perc_low_income + 
+       perc_neigh5_icu_beds + case_test_ratio + day_num, 
      data=model_vars_std.df)
 ```
 
@@ -529,34 +573,36 @@ tidy(pooled) %>%
                        pm10_conc = "PM10 conc.",
                        no_conc = "nitrogen monoxide conc.",
                        o3_conc = "ozone conc.",
-                      nmvoc_conc = "Non-methane volatile organic compounds conc.", 
-                      sia_conc = "secondary inorganic aerosol conc.",
-                      co_conc = "carbon monoxide conc.",
-                      no2_conc = "nitrogen dioxide conc.",
-                      so2_conc = "sulphur dioxide",
-                      cause_death_8 = "cause death: respiratory (prov.)",
-                      cause_death_7 = "cause death: circulatory (prov.)",
-                      cause_death_2_1_10 = "cause death: breast cancer (prov.)",
-                      cause_death_2_1_4 = "cause death: colorectal cancer (prov.)",
-                      cause_death_2_1_8 = "cause death: lung cancer (prov.)",
-                      CHRONIC_DIAB = "perc. diabetes (reg.)",
-                      CHRONIC_HYP  = "perc. hypertension (reg.)", 
-                      CHRONIC_BRONC = "perc. bronchitis (reg.)", 
-                      CHRONIC_ALLER = "perc. allergies (reg.)",
-                      smokers = "perc. smokers (reg.)",
-                      hotel_beds = "n. hotel beds",
-                      perc_employed = "perc. employed",
-                      perc_degree_over_workforce = "perc. degree (over workforce)",
+                       nmvoc_conc = "Non-methane volatile organic compounds conc.", 
+                       sia_conc = "secondary inorganic aerosol conc.",
+                       co_conc = "carbon monoxide conc.",
+                       no2_conc = "nitrogen dioxide conc.",
+                       so2_conc = "sulphur dioxide",
+                       cause_death_8 = "cause death: respiratory (prov.)",
+                       cause_death_7 = "cause death: circulatory (prov.)",
+                       cause_death_2_1_10 = "cause death: breast cancer (prov.)",
+                       cause_death_2_1_4 = "cause death: colorectal cancer (prov.)",
+                       cause_death_2_1_8 = "cause death: lung cancer (prov.)",
+                       CHRONIC_DIAB = "perc. diabetes (reg.)",
+                       CHRONIC_HYP  = "perc. hypertension (reg.)", 
+                       CHRONIC_BRONC = "perc. bronchitis (reg.)", 
+                       CHRONIC_ALLER = "perc. allergies (reg.)",
+                       smokers = "perc. smokers (reg.)",
+                       hotel_beds = "n. hotel beds",
+                       perc_employed = "perc. employed",
+                       perc_degree_over_workforce = "perc. degree (over workforce)",
                        perc_over_65 = "perc. over 65",
                        gini_over74 = "over 74 conc.",
                        perc_work_outside_comune = "perc. working out of comune",
                        perc_families_over_4 = "perc. families over 4",
                        sum_employees = "num. employees",
+                       perc_low_income = "perc. low income",
                        case_test_ratio = "cases vs tests ratio (reg.)",
+                       perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
                        day_num = "days since 24 Feb",
                        `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near exces mortality",
                        `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near excess mortality X lockdown")) +
-  labs(x="Effects (above zero is positive) on present excess mortality for males over 70") +
+  labs(x="Effects (above zero is positive) on present excess mortality over 65") +
   guides(color = FALSE) +
   theme_bw()
 ```
@@ -570,13 +616,13 @@ region.sf <-
 
 funPlot <- function(day) {
   this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
-  hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
-                                                 this_dat$hex_id)]
-  hex_ita_1km.sf$value_cut <- cut(hex_ita_1km.sf$value, 
-                                  breaks = c(-128,-50,-10,-5,0,5,10,50,128),
-                                  include.lowest = T)
+  hex_ita_10km.sf$value <- this_dat$dist_sd[match(hex_ita_10km.sf$hex_id,
+                                                  this_dat$hex_id)]
+  hex_ita_10km.sf$value_cut <- cut(hex_ita_10km.sf$value, 
+                                   breaks = c(-128,-50,-10,-5,0,5,10,50,128),
+                                   include.lowest = T)
   return(ggplot() +
-           geom_sf(data = hex_ita_1km.sf, aes(fill = value_cut), colour = NA) +
+           geom_sf(data = hex_ita_10km.sf, aes(fill = value_cut), colour = NA) +
            scale_fill_brewer(palette = "YlOrRd", direction = 1,
                              drop = F) +
            geom_sf(data = region.sf, fill = NA, size = .1) +
@@ -626,39 +672,39 @@ funPlotGif <- function(day) {
   require(cowplot)
   
   this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
-  hex_ita_1km.sf$value <- this_dat$dist_sd[match(hex_ita_1km.sf$hex_id,
-                                                 this_dat$hex_id)]
-  hex_ita_1km.sf$value_cut <- cut(hex_ita_1km.sf$value, 
-                                  breaks = rev(c(-200,-100,-50,-10,-5,-2, 2,5,10,50,150,200)),
-                                  include.lowest = T)
+  hex_ita_10km.sf$value <- this_dat$dist_sd[match(hex_ita_10km.sf$hex_id,
+                                                  this_dat$hex_id)]
+  hex_ita_10km.sf$value_cut <- cut(hex_ita_10km.sf$value, 
+                                   breaks = rev(c(-200,-100,-50,-10,-5,-2, 2,5,10,50,150,200)),
+                                   include.lowest = T)
   
-  hex_ita_1km.sf$value_cut <- factor(hex_ita_1km.sf$value_cut,
-                                     levels = rev(levels(hex_ita_1km.sf$value_cut)))
+  hex_ita_10km.sf$value_cut <- factor(hex_ita_10km.sf$value_cut,
+                                      levels = rev(levels(hex_ita_10km.sf$value_cut)))
   
   p1 <-
     ggplot() +
-                    geom_sf(data = hex_ita_1km.sf, aes(fill = value_cut), colour = NA) +
-                    scale_fill_brewer(palette = "Spectral", direction = 1, drop = FALSE) +
-                    geom_sf(data = region.sf, fill = NA, size = .2) +
-                    geom_sf(data = province.sf, fill = NA, size = .1) +
-                    theme_bw() +
-                    theme(axis.text = element_blank(),
-                          axis.ticks = element_blank(),
-                          legend.position = c(.9,.75)) +
-                    labs(caption = "right-aligned 14-day m.a. | 92% comune reporting",
-                         fill = "Difference in SD\nfrom 2015-19 mean",
-                         title = sprintf("Number of deaths (every cause): 2020 / 2015-19 difference\n%s",format(as.Date(paste0("2020", day), format = "%Y%m%d"), "%d/%m/%Y"))) +
-                    coord_sf(ylim = c(4100000, 5200000))
+    geom_sf(data = hex_ita_10km.sf, aes(fill = value_cut), colour = NA) +
+    scale_fill_brewer(palette = "Spectral", direction = 1, drop = FALSE) +
+    geom_sf(data = region.sf, fill = NA, size = .2) +
+    geom_sf(data = province.sf, fill = NA, size = .1) +
+    theme_bw() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          legend.position = c(.9,.75)) +
+    labs(caption = "right-aligned 14-day m.a. | 92% comune reporting",
+         fill = "Difference in SD\nfrom 2015-19 mean",
+         title = sprintf("Number of deaths (every cause): 2020 / 2015-19 difference\n%s",format(as.Date(paste0("2020", day), format = "%Y%m%d"), "%d/%m/%Y"))) +
+    coord_sf(ylim = c(4100000, 5200000))
   
   p2 <- 
     base_geom_line +
-                    geom_vline(xintercept = as.Date(paste0("2020", day), format = "%Y%m%d"), 
-                               alpha = .7, linetype = 2)
-    
+    geom_vline(xintercept = as.Date(paste0("2020", day), format = "%Y%m%d"), 
+               alpha = .7, linetype = 2)
+  
   
   return(
     plot_grid(p1, p2, align = "v", nrow = 2, rel_heights = c(8.4/10, 1.6/10))
-    )
+  )
 }
 
 plot.list <- lapply(all_days, funPlotGif)
