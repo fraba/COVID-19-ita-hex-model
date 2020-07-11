@@ -1,0 +1,343 @@
+B: estrazione di minerali da cave e miniere
+  05: estrazione di carbone (esclusa torba)
+    051: estrazione di antracite
+  06: estrazione di petrolio greggio e di gas naturale
+    061: estrazione di petrolio greggio
+    062: estrazione di gas naturale
+  07: estrazione di minerali metalliferi
+    072: estrazione di minerali metalliferi non ferrosi
+  08: altre attività di estrazione di minerali da cave e miniere
+    081: estrazione di pietra, sabbia e argilla
+    089: estrazione di minerali da cave e miniere nca
+  09: attività dei servizi di supporto all'estrazione
+    091: attività di supporto all'estrazione di petrolio e di gas naturale
+    099: attività di supporto per l'estrazione da cave e miniere di altri minerali
+C: attività manifatturiere
+  10: industrie alimentari
+    101: lavorazione e conservazione di carne e produzione di prodotti a base di carne
+    102: lavorazione e conservazione di pesce, crostacei e molluschi
+    103: lavorazione e conservazione di frutta e ortaggi
+    104: produzione di oli e grassi vegetali e animali
+    105: industria lattiero-casearia
+    106: lavorazione delle granaglie, produzione di amidi e di prodotti amidacei
+    107: produzione di prodotti da forno e farinacei
+    108: produzione di altri prodotti alimentari
+    109: produzione di prodotti per l'alimentazione degli animali
+  11: industria delle bevande
+    110: industria delle bevande
+  12: industria del tabacco
+    120: industria del tabacco
+  13: industrie tessili
+    131: preparazione e filatura di fibre tessili
+    132: tessitura
+    133: finissaggio dei tessili
+    139: altre industrie tessili
+  14: confezione di articoli di abbigliamento, confezione di articoli in pelle e pelliccia
+    141: confezione di articoli di abbigliamento, escluso abbigliamento in pelliccia
+    142: confezione di articoli in pelliccia
+    143: fabbricazione di articoli di maglieria
+  15: fabbricazione di articoli in pelle e simili
+    151: preparazione e concia del cuoio, fabbricazione di articoli da viaggio, borse, pelletteria e selleria, preparazione e tintura di pellicce
+    152: fabbricazione di calzature
+  16: industria del legno e dei prodotti in legno e sughero (esclusi i mobili), fabbricazione di articoli in paglia e materiali da intreccio
+    161: taglio e piallatura del legno
+    162: fabbricazione di prodotti in legno, sughero, paglia e materiali da intreccio
+  17: fabbricazione di carta e di prodotti di carta
+    171: fabbricazione di pasta-carta, carta e cartone
+    172: fabbricazione di articoli di carta e cartone
+  18: stampa e riproduzione di supporti registrati
+    181: stampa e servizi connessi alla stampa
+    182: riproduzione di supporti registrati
+  19: fabbricazione di coke e prodotti derivanti dalla raffinazione del petrolio
+    191: fabbricazione di prodotti di cokeria
+    192: fabbricazione di prodotti derivanti dalla raffinazione del petrolio
+  20: fabbricazione di prodotti chimici
+    201: fabbricazione di prodotti chimici di base, di fertilizzanti e composti azotati, di materie plastiche e gomma sintetica in forme primarie
+    202: fabbricazione di agrofarmaci e di altri prodotti chimici per l'agricoltura
+    203: fabbricazione di pitture, vernici e smalti, inchiostri da stampa e adesivi sintetici
+    204: fabbricazione di saponi e detergenti, di prodotti per la pulizia e la lucidatura, di profumi e cosmetici
+    205: fabbricazione di altri prodotti chimici
+    206: fabbricazione di fibre sintetiche e artificiali
+  21: fabbricazione di prodotti farmaceutici di base e di preparati farmaceutici
+    211: fabbricazione di prodotti farmaceutici di base
+    212: fabbricazione di medicinali e preparati farmaceutici
+  22: fabbricazione di articoli in gomma e materie plastiche
+    221: fabbricazione di articoli in gomma
+    222: fabbricazione di articoli in materie plastiche
+  23: fabbricazione di altri prodotti della lavorazione di minerali non metalliferi
+    231: fabbricazione di vetro e di prodotti in vetro
+    232: fabbricazione di prodotti refrattari
+    233: fabbricazione di materiali da costruzione in terracotta
+    234: fabbricazione di altri prodotti in porcellana e in ceramica
+    235: produzione di cemento, calce e gesso
+    236: fabbricazione di prodotti in calcestruzzo, cemento e gesso
+    237: taglio, modellatura e finitura di pietre
+    239: fabbricazione di prodotti abrasivi e di prodotti in minerali non metalliferi nca
+  24: metallurgia
+    241: siderurgia
+    242: fabbricazione di tubi, condotti, profilati cavi e relativi accessori in acciaio esclusi quelli in acciaio colato
+    243: fabbricazione di altri prodotti della prima trasformazione dell'acciaio
+    244: produzione di metalli di base preziosi e altri metalli non ferrosi, trattamento dei combustibili nucleari
+    245: fonderie
+  25: fabbricazione di prodotti in metallo (esclusi macchinari e attrezzature)
+    251: fabbricazione di elementi da costruzione in metallo
+    252: fabbricazione di cisterne, serbatoi, radiatori e contenitori in metallo
+    253: fabbricazione di generatori di vapore, esclusi i contenitori in metallo per caldaie per il riscaldamento centrale ad acqua calda
+    254: fabbricazione di armi e munizioni
+    255: fucinatura, imbutitura, stampaggio e profilatura dei metalli, metallurgia delle polveri
+    256: trattamento e rivestimento dei metalli, lavori di meccanica generale
+    257: fabbricazione di articoli di coltelleria, utensili e oggetti di ferramenta
+    259: fabbricazione di altri prodotti in metallo
+  26: fabbricazione di computer e prodotti di elettronica e ottica, apparecchi elettromedicali, apparecchi di misurazione e di orologi
+    261: fabbricazione di componenti elettronici e schede elettroniche
+    262: fabbricazione di computer e unità periferiche
+    263: fabbricazione di apparecchiature per le telecomunicazioni
+    264: fabbricazione di prodotti di elettronica di consumo audio e video
+    265: fabbricazione di strumenti e apparecchi di misurazione, prova e navigazione, orologi
+    266: fabbricazione di strumenti per irradiazione, apparecchiature elettromedicali ed elettroterapeutiche
+    267: fabbricazione di strumenti ottici e attrezzature fotografiche
+    268: fabbricazione di supporti magnetici ed ottici
+  27: fabbricazione di apparecchiature elettriche ed apparecchiature per uso domestico non elettriche
+    271: fabbricazione di motori, generatori e trasformatori elettrici e di apparecchiature per la distribuzione e il controllo dell'elettricità
+    272: fabbricazione di batterie di pile ed accumulatori elettrici
+    273: fabbricazione di cablaggi e apparecchiature di cablaggio
+    274: fabbricazione di apparecchiature per illuminazione
+    275: fabbricazione di apparecchi per uso domestico
+    279: fabbricazione di altre apparecchiature elettriche
+  28: fabbricazione di macchinari ed apparecchiature nca
+    281: fabbricazione di macchine di impiego generale
+    282: fabbricazione di altre macchine di impiego generale
+    283: fabbricazione di macchine per l'agricoltura e la silvicoltura
+    284: fabbricazione di macchine per la formatura dei metalli e di altre macchine utensili
+    289: fabbricazione di altre macchine per impieghi speciali
+  29: fabbricazione di autoveicoli, rimorchi e semirimorchi
+    291: fabbricazione di autoveicoli
+    292: fabbricazione di carrozzerie per autoveicoli, rimorchi e semirimorchi
+    293: fabbricazione di parti ed accessori per autoveicoli e loro motori
+  30: fabbricazione di altri mezzi di trasporto
+    301: costruzione di navi e imbarcazioni
+    302: costruzione di locomotive e di materiale rotabile ferro-tranviario
+    303: fabbricazione di aeromobili, di veicoli spaziali e dei relativi dispositivi
+    304: fabbricazione di veicoli militari da combattimento
+    309: fabbricazione di mezzi di trasporto nca
+  31: fabbricazione di mobili
+    310: fabbricazione di mobili
+  32: altre industrie manifatturiere
+    321: fabbricazione di gioielleria, bigiotteria e articoli connessi, lavorazione delle pietre preziose
+    322: fabbricazione di strumenti musicali
+    323: fabbricazione di articoli sportivi
+    324: fabbricazione di giochi e giocattoli
+    325: fabbricazione di strumenti e forniture mediche e dentistiche
+    329: industrie manifatturiere nca
+  33: riparazione, manutenzione ed installazione di macchine ed apparecchiature
+    331: riparazione e manutenzione di prodotti in metallo, macchine ed apparecchiature
+    332: installazione di macchine ed apparecchiature industriali
+D: fornitura di energia elettrica, gas, vapore e aria condizionata
+  35: fornitura di energia elettrica, gas, vapore e aria condizionata
+    351: produzione, trasmissione e distribuzione di energia elettrica
+    352: produzione di gas, distribuzione di combustibili gassosi mediante condotte
+    353: fornitura di vapore e aria condizionata
+E: fornitura di acqua reti fognarie, attività di gestione dei rifiuti e risanamento
+  36: raccolta, trattamento e fornitura di acqua
+    360: raccolta, trattamento e fornitura di acqua
+  37: gestione delle reti fognarie
+    370: gestione delle reti fognarie
+  38: attività di raccolta, trattamento e smaltimento dei rifiuti recupero dei materiali
+    381: raccolta dei rifiuti
+    382: trattamento e smaltimento dei rifiuti
+    383: recupero dei materiali
+  39: attività di risanamento e altri servizi di gestione dei rifiuti
+    390: attività di risanamento e altri servizi di gestione dei rifiuti
+F: costruzioni
+  41: costruzione di edifici
+    411: sviluppo di progetti immobiliari
+    412: costruzione di edifici residenziali e non residenziali
+  42: ingegneria civile
+    421: costruzione di strade e ferrovie
+    422: costruzione di opere di pubblica utilità
+    429: costruzione di altre opere di ingegneria civile
+  43: lavori di costruzione specializzati
+    431: demolizione e preparazione del cantiere edile
+    432: installazione di impianti elettrici, idraulici ed altri lavori di costruzione e installazione
+    433: completamento e finitura di edifici
+    439: altri lavori specializzati di costruzione
+G: commercio all'ingrosso e al dettaglio, riparazione di autoveicoli e motocicli
+  45: commercio all'ingrosso e al dettaglio e riparazione di autoveicoli e motocicli
+    451: commercio di autoveicoli
+    452: manutenzione e riparazione di autoveicoli
+    453: commercio di parti e accessori di autoveicoli
+    454: commercio, manutenzione e riparazione di motocicli e relative parti ed accessori
+  46: commercio all'ingrosso (escluso quello di autoveicoli e di motocicli)
+    461: intermediari del commercio
+    462: commercio all'ingrosso di materie prime agricole e di animali vivi
+    463: commercio all'ingrosso di prodotti alimentari, bevande e prodotti del tabacco
+    464: commercio all'ingrosso di beni di consumo finale
+    465: commercio all'ingrosso di apparecchiature ict
+    466: commercio all'ingrosso di altri macchinari, attrezzature e forniture
+    467: commercio all'ingrosso specializzato di altri prodotti
+    469: commercio all'ingrosso non specializzato
+  47: commercio al dettaglio (escluso quello di autoveicoli e di motocicli)
+    471: commercio al dettaglio in esercizi non specializzati
+    472: commercio al dettaglio di prodotti alimentari, bevande e tabacco in esercizi specializzati
+    473: commercio al dettaglio di carburante per autotrazione in esercizi specializzati
+    474: commercio al dettaglio di apparecchiature informatiche e per le telecomunicazioni (ict) in esercizi specializzati
+    475: commercio al dettaglio di altri prodotti per uso domestico in esercizi specializzati
+    476: commercio al dettaglio di articoli culturali e ricreativi in esercizi specializzati
+    477: commercio al dettaglio di altri prodotti in esercizi specializzati
+    478: commercio al dettaglio ambulante
+    479: commercio al dettaglio al di fuori di negozi, banchi e mercati
+H: trasporto e magazzinaggio
+  49: trasporto terrestre e trasporto mediante condotte
+    491: trasporto ferroviario di passeggeri (interurbano)
+    492: trasporto ferroviario di merci
+    493: altri trasporti terrestri di passeggeri
+    494: trasporto di merci su strada e servizi di trasloco
+    495: trasporto mediante condotte
+  50: trasporto marittimo e per vie d'acqua
+    501: trasporto marittimo e costiero di passeggeri
+    502: trasporto marittimo e costiero di merci
+    503: trasporto di passeggeri per vie d'acqua interne
+    504: trasporto di merci per vie d'acqua interne
+  51: trasporto aereo
+    511: trasporto aereo di passeggeri
+    512: trasporto aereo di merci e trasporto spaziale
+  52: magazzinaggio e attività di supporto ai trasporti
+    521: magazzinaggio e custodia
+    522: attività di supporto ai trasporti
+  53: servizi postali e attività di corriere
+    531: attività postali con obbligo di servizio universale
+    532: altre attività postali e di corriere
+I: attività dei servizi di alloggio e di ristorazione
+  55: alloggio
+    551: alberghi e strutture simili
+    552: alloggi per vacanze e altre strutture per brevi soggiorni
+    553: aree di campeggio e aree attrezzate per camper e roulotte
+    559: altri alloggi
+  56: attività dei servizi di ristorazione
+    561: ristoranti e attività di ristorazione mobile
+    562: fornitura di pasti preparati (catering) e altri servizi di ristorazione
+    563: bar e altri esercizi simili senza cucina
+J: servizi di informazione e comunicazione
+  58: attività editoriali
+    581: edizione di libri, periodici ed altre attività editoriali
+    582: edizione di software
+  59: attività di produzione cinematografica, di video e di programmi televisivi, di registrazioni musicali e sonore
+    591: attività di produzione cinematografica, di video e di programmi televisivi
+    592: attività di registrazione sonora e di editoria musicale
+  60: attività di programmazione e trasmissione
+    601: trasmissioni radiofoniche
+    602: attività di programmazione e trasmissioni televisive
+  61: telecomunicazioni
+    611: telecomunicazioni fisse
+    612: telecomunicazioni mobili
+    613: telecomunicazioni satellitari
+    619: altre attività di telecomunicazione
+  62: produzione di software, consulenza informatica e attività connesse
+    620: produzione di software, consulenza informatica e attività connesse
+  63: attività dei servizi d'informazione e altri servizi informatici
+    631: elaborazione dei dati, hosting e attività connesse, portali web
+    639: altre attività dei servizi d'informazione
+K: attività finanziarie e assicurative
+  64: attività di servizi finanziari (escluse le assicurazioni e i fondi pensione)
+    641: intermediazione monetaria
+    642: attività delle società di partecipazione (holding)
+    643: società fiduciarie, fondi e altre società simili
+    649: altre attività di servizi finanziari (escluse le assicurazioni e i fondi pensione)
+  65: assicurazioni, riassicurazioni e fondi pensione (escluse le assicurazioni sociali obbligatorie)
+    651: assicurazioni
+    652: riassicurazioni
+  66: attività ausiliarie dei servizi finanziari e delle attività assicurative
+    661: attività ausiliarie dei servizi finanziari, (escluse le assicurazioni e i fondi pensione)
+    662: attività ausiliarie delle assicurazioni e dei fondi pensione
+    663: attività di gestione dei fondi
+L: attività immobiliari
+  68: attività immobiliari
+    681: compravendita di beni immobili effettuata su beni propri
+    682: affitto e gestione di immobili di proprietà o in leasing
+    683: attività immobiliari per conto terzi
+M: attività professionali, scientifiche e tecniche
+  69: attività legali e contabilità
+    691: attività degli studi legali
+    692: contabilità, controllo e revisione contabile, consulenza in materia fiscale e del lavoro
+  70: attività di direzione aziendale e di consulenza gestionale
+    701: attività di direzione aziendale
+    702: attività di consulenza gestionale
+  71: attività degli studi di architettura e d'ingegneria, collaudi ed analisi tecniche
+    711: attività degli studi di architettura, ingegneria ed altri studi tecnici
+    712: collaudi ed analisi tecniche
+  72: ricerca scientifica e sviluppo
+    721: ricerca e sviluppo sperimentale nel campo delle scienze naturali e dell'ingegneria
+    722: ricerca e sviluppo sperimentale nel campo delle scienze sociali e umanistiche
+  73: pubblicità e ricerche di mercato
+    731: pubblicità
+    732: ricerche di mercato e sondaggi di opinione
+  74: altre attività professionali, scientifiche e tecniche
+    741: attività di design specializzate
+    742: attività fotografiche
+    743: traduzione e interpretariato
+    749: altre attività professionali, scientifiche e tecniche nca
+  75: servizi veterinari
+    750: servizi veterinari
+N: noleggio, agenzie di viaggio, servizi di supporto alle imprese
+  77: attività di noleggio e leasing operativo
+    771: noleggio di autoveicoli
+    772: noleggio di beni per uso personale e per la casa
+    773: noleggio di altre macchine, attrezzature e beni materiali
+    774: concessione dei diritti di sfruttamento di proprietà intellettuale e prodotti simili (escluse le opere protette dal copyright)
+  78: attività di ricerca, selezione, fornitura di personale
+    781: attività di agenzie di collocamento
+    782: attività delle agenzie di lavoro temporaneo (interinale)
+    783: altre attività di fornitura e gestione di risorse umane
+  79: attività dei servizi delle agenzie di viaggio, dei tour operator e servizi di prenotazione e attività connesse
+    791: attività delle agenzie di viaggio e dei tour operator
+    799: altri servizi di prenotazione e attività connesse
+  80: servizi di vigilanza e investigazione
+    801: servizi di vigilanza privata
+    802: servizi connessi ai sistemi di vigilanza
+    803: servizi investigativi privati
+  81: attività di servizi per edifici e paesaggio
+    811: servizi integrati di gestione agli edifici
+    812: attività di pulizia e disinfestazione
+    813: cura e manutenzione del paesaggio
+  82: attività di supporto per le funzioni d'ufficio e altri servizi di supporto alle imprese
+    821: attività di supporto per le funzioni d'ufficio
+    822: attività dei call center
+    823: organizzazione di convegni e fiere
+    829: servizi di supporto alle imprese nca
+P: istruzione
+  85: istruzione
+    851: istruzione prescolastica
+    852: istruzione primaria
+    853: istruzione secondaria
+    854: istruzione post-secondaria universitaria e non universitaria
+    855: altri servizi di istruzione
+    856: attività di supporto all'istruzione
+Q: sanità e assistenza sociale
+  86: assistenza sanitaria
+    861: servizi ospedalieri
+    862: servizi degli studi medici e odontoiatrici
+    869: altri servizi di assistenza sanitaria
+  87: servizi di assistenza sociale residenziale
+    871: strutture di assistenza infermieristica residenziale
+    872: strutture di assistenza residenziale per persone affette da ritardi mentali, disturbi mentali o che abusano di sostanze stupefacenti
+    873: strutture di assistenza residenziale per anziani e disabili
+    879: altre strutture di assistenza sociale residenziale
+  88: assistenza sociale non residenziale
+    881: assistenza sociale non residenziale per anziani e disabili
+    889: altre attività di assistenza sociale non residenziale
+R: attività artistiche, sportive, di intrattenimento e divertimento
+  90: attività creative, artistiche e di intrattenimento
+    900: attività creative, artistiche e di intrattenimento
+  91: attività di biblioteche, archivi, musei ed altre attività culturali
+    910: attività di biblioteche, archivi, musei ed altre attività culturali
+  92: attività riguardanti le lotterie, le scommesse, le case da gioco
+    920: attività riguardanti le lotterie, le scommesse, le case da gioco
+  93: attività sportive, di intrattenimento e di divertimento
+    931: attività sportive
+    932: attività ricreative e di divertimento
+S: altre attività di servizi
+  95: riparazione di computer e di beni per uso personale e per la casa
+    951: riparazione di computer e di apparecchiature per le comunicazioni
+    952: riparazione di beni per uso personale e per la casa
+  96: altre attività di servizi per la persona
+    960: altre attività di servizi per la persona
