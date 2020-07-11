@@ -11,6 +11,7 @@ library(knitr)
 library(sf)
 library(ggplot2)
 library(viridis)
+library(knitr)
 ```
 
 ```{r}
@@ -82,7 +83,79 @@ hex_ita_10km.sf <-
 ### Industry
 
 ```{r}
-sez2011_industry.df <- read.csv("../census_2011/census_industry_sez_2011.csv")
+require(readr)
+require(stringr)
+
+sez2011_industry.df <- 
+  read_csv("../census_2011/census_industry_sez_2011.csv.zip",
+           col_types = list(TIPO_SOGGETTO = col_character(),
+                            CODREG = col_double(),
+                            PROCOM = col_double(),
+                            NSEZ = col_double(),
+                            ATECO3 = col_double(),
+                            NUM_UNITA = col_double(),
+                            ADDETTI = col_double(),
+                            ALTRI_RETRIB = col_double(),
+                            VOLONTARI = col_double(),
+                            SEZ2011 = col_double()))
+
+sez2011_industry.df$ALTRI_RETRIB[is.na(sez2011_industry.df$ALTRI_RETRIB)] <- 0
+sez2011_industry.df$VOLONTARI[is.na(sez2011_industry.df$VOLONTARI)] <- 0
+
+extractAtecoD2 <- function(x) {
+  return(as.numeric(gsub("\\d$", "", str_extract(x, "\\d{3}"))))
+}
+
+extractAtecoD3 <- function(x) {
+  return(as.numeric(str_extract(x, "\\d{3}")))
+}
+
+sez2011_industry.df <-
+  sez2011_industry.df %>%
+  dplyr::mutate(manufacturing = 
+           extractAtecoD2(ATECO3) %in% 10:33,
+         construction = 
+           extractAtecoD2(ATECO3) %in% 41:43,
+         wholesaling = 
+           extractAtecoD3(ATECO3) %in% 451:469,
+        retail = 
+          extractAtecoD3(ATECO3) %in% 471:479,
+        transport = 
+          extractAtecoD3(ATECO3) %in% 491:512,
+        warehousing = 
+          extractAtecoD3(ATECO3) %in% 521:522,
+        delivery = 
+          extractAtecoD3(ATECO3) %in% 531:532,
+        hospitality = 
+          extractAtecoD3(ATECO3) %in% 551:563,
+        services = 
+          extractAtecoD3(ATECO3) %in% 581:829,
+        education = 
+          extractAtecoD3(ATECO3) %in% 851:856,
+        healthcare = 
+          extractAtecoD3(ATECO3) %in% 861:869,
+        agedcare = 
+          extractAtecoD3(ATECO3) %in% 873)
+
+res <- 
+  apply(sez2011_industry.df %>% 
+        select(manufacturing:agedcare), 
+      1, 
+      function(x) ifelse(length(names(x)[x]) > 0, names(x)[x], NA))
+
+sez2011_industry.df$ATECO3_code <- res
+  
+sez2011_industry.df <- 
+  sez2011_industry.df %>%
+  dplyr::select(-manufacturing, -construction, -wholesaling, -retail, -transport, -warehousing, -delivery, -hospitality, -services, -education, -healthcare, -agedcare)
+
+
+sez2011_industry.df$ATECO3_code[is.na(sez2011_industry.df$ATECO3_code)] <- 'other'
+
+sez2011_industry.df %>%
+  group_by(ATECO3_code) %>%
+  summarise(n = sum(ADDETTI) + sum(ALTRI_RETRIB) + sum(VOLONTARI)) %>%
+  mutate(freq = n / sum(n))
 
 sez2011_industry.df$hex_id <- 
   sez2011_centroids.sf$hex_id[match(sez2011_industry.df$SEZ2011,
@@ -93,9 +166,61 @@ hex_industry.df <-
   dplyr::group_by(hex_id) %>%
   dplyr::summarize(n_companies = n(),
                    mean_company_units = mean(NUM_UNITA, na.rm=T),
-                   sum_employees = sum(ADDETTI, na.rm=T),
-                   median_employees = median(ADDETTI, na.rm=T)
-  )
+                   sum_employees = 
+                     sum(ADDETTI) + sum(ALTRI_RETRIB) + sum(VOLONTARI),
+                   sum_agedcare = 
+                     sum(ADDETTI[ATECO3_code == "agedcare"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "agedcare"]) + 
+                     sum(VOLONTARI[ATECO3_code == "agedcare"]),
+                   sum_construction = 
+                     sum(ADDETTI[ATECO3_code == "construction"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "construction"]) + 
+                     sum(VOLONTARI[ATECO3_code == "construction"]),
+                   sum_delivery = 
+                     sum(ADDETTI[ATECO3_code == "delivery"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "delivery"]) + 
+                     sum(VOLONTARI[ATECO3_code == "delivery"]),
+                   sum_education = 
+                     sum(ADDETTI[ATECO3_code == "education"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "education"]) + 
+                     sum(VOLONTARI[ATECO3_code == "education"]),
+                   sum_healthcare = 
+                     sum(ADDETTI[ATECO3_code == "healthcare"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "healthcare"]) + 
+                     sum(VOLONTARI[ATECO3_code == "healthcare"]),
+                   sum_hospitality = 
+                     sum(ADDETTI[ATECO3_code == "hospitality"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "hospitality"]) + 
+                     sum(VOLONTARI[ATECO3_code == "hospitality"]),
+                   sum_manufacturing = 
+                     sum(ADDETTI[ATECO3_code == "manufacturing"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "manufacturing"]) + 
+                     sum(VOLONTARI[ATECO3_code == "manufacturing"]),
+                   sum_other = 
+                     sum(ADDETTI[ATECO3_code == "other"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "other"]) + 
+                     sum(VOLONTARI[ATECO3_code == "other"]),
+                   sum_retail = 
+                     sum(ADDETTI[ATECO3_code == "retail"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "retail"]) + 
+                     sum(VOLONTARI[ATECO3_code == "retail"]),
+                   sum_services = 
+                     sum(ADDETTI[ATECO3_code == "services"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "services"]) + 
+                     sum(VOLONTARI[ATECO3_code == "services"]),
+                   sum_transport = 
+                     sum(ADDETTI[ATECO3_code == "transport"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "transport"]) + 
+                     sum(VOLONTARI[ATECO3_code == "transport"]),
+                   sum_warehousing = 
+                     sum(ADDETTI[ATECO3_code == "warehousing"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "warehousing"]) + 
+                     sum(VOLONTARI[ATECO3_code == "warehousing"]),
+                   sum_wholesaling = 
+                     sum(ADDETTI[ATECO3_code == "wholesaling"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "wholesaling"]) + 
+                     sum(VOLONTARI[ATECO3_code == "wholesaling"]),
+                   median_employees = median(ADDETTI, na.rm=T))
 
 
 hex_ita_10km.sf <-
@@ -112,7 +237,7 @@ ggplot(hex_ita_10km.sf) +
   scale_fill_viridis()
 
 ggplot(hex_ita_10km.sf) +
-  geom_sf(aes(fill = sum_employees)) +
+  geom_sf(aes(fill = log(sum_manufacturing / P1)+1), colour = NA) +
   scale_fill_viridis()
 ```
 

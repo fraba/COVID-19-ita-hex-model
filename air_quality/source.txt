@@ -1,5 +1,0 @@
-source: aqicn.org/data-platform/covid19/
-accessed: 2020/04/25
-
-source: https://www.dati.lombardia.it/Ambiente/Dati-sensori-aria/nicp-bhqi
-accessed:  2020-04-25

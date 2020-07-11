@@ -9,7 +9,7 @@ Key columns:
 * `CODREG`: numeric
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = T)
 
 library(sf)
 library(ggplot2)
@@ -23,11 +23,14 @@ library(parallel)
 library(broom)
 library(dotwhisker)
 library(knitr)
+library(readxl)
+library(humidity)
 ```
 
 ```{r}
 load("../grid/hex_ita_10km.sf.RData")
 load("../air_quality/airquality.df.RData")
+load("../air_quality/era5_climate_hex.df.RData")
 load("../dead/hex_dead.df.RData")
 load("../covid-cases-prov/reg_testing.df.RData")
 load("../locked-down-comune/hex_pop_lockdown.RData")
@@ -36,7 +39,6 @@ load("../pop_density/pop_densities.df.RData")
 
 ```{r}
 # Region misconding
-
 hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Abruzzo"] <- '13'
 hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Basilicata"] <- '17'
 hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Emilia-Romagna"] <- '8'
@@ -168,6 +170,23 @@ model_vars.df <-
 ```
 
 
+```{r}
+era5_climate_hex.df$day <- era5_climate_hex.df$date
+
+era5_climate_hex_spread.df <-
+  era5_climate_hex.df %>%
+  dplyr::select(-date) %>%
+  tidyr::pivot_wider(names_from = var, values_from = value,
+                     names_prefix = "era5_") %>%
+  dplyr::mutate(era5_rhum = RH(era5_temp, era5_dewp, isK = TRUE))
+
+model_vars.df <- 
+  merge(model_vars.df, 
+        era5_climate_hex_spread.df,
+        by = c("hex_id", "day"))
+```
+
+
 ## Census
 
 ```{r}
@@ -199,9 +218,42 @@ model_vars.df$perc_families_over_4[
 
 model_vars.df$sum_employees[
   is.na(model_vars.df$sum_employees)] <- 0
-
+model_vars.df$sum_agedcare[
+  is.na(model_vars.df$sum_agedcare)] <- 0
+model_vars.df$sum_construction[
+  is.na(model_vars.df$sum_construction)] <- 0
+model_vars.df$sum_delivery[
+  is.na(model_vars.df$sum_delivery)] <- 0
+model_vars.df$sum_education[
+  is.na(model_vars.df$sum_education)] <- 0
+model_vars.df$sum_healthcare[
+  is.na(model_vars.df$sum_healthcare)] <- 0
+model_vars.df$sum_hospitality[
+  is.na(model_vars.df$sum_hospitality)] <- 0
+model_vars.df$sum_manufacturing[
+  is.na(model_vars.df$sum_manufacturing)] <- 0
+model_vars.df$sum_other[
+  is.na(model_vars.df$sum_other)] <- 0
+model_vars.df$sum_retail[
+  is.na(model_vars.df$sum_retail)] <- 0
+model_vars.df$sum_services[
+  is.na(model_vars.df$sum_services)] <- 0
+model_vars.df$sum_transport[
+  is.na(model_vars.df$sum_transport)] <- 0
+model_vars.df$sum_warehousing[
+  is.na(model_vars.df$sum_warehousing)] <- 0
+model_vars.df$sum_wholesaling[
+  is.na(model_vars.df$sum_wholesaling)] <- 0
+  
 model_vars.df$perc_degree_over_workforce[
   !is.finite(model_vars.df$perc_degree_over_workforce)] <- 0
+
+myLog10 <- function(x){log10(x+1)}
+
+model_vars.df <- 
+  model_vars.df %>%
+  mutate_at(.vars = vars(sum_employees:sum_wholesaling),
+            .funs = list(log10 = myLog10))
 
 ```
 
@@ -220,7 +272,6 @@ model_vars.df <-
   merge(model_vars.df, reg_testing.df, 
         by.x = c("CODREG", "day"), 
         by.y = c("codice_regione", "date"))
-
 ```
 
 ## Lock Down
@@ -367,12 +418,11 @@ model_vars.df$gini_over74 <-
                                      pop_densities.df$hex_id)]
 
 model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
-
 ```
 
 # Causes of Death (Provincial level, 2017)
 
-```{r}
+```{r, eval =F}
 load("../cause-death-prov-2017/hex_cause_death_prov_2017.df.RData")
 
 model_vars.df <- 
@@ -381,6 +431,10 @@ model_vars.df <-
           dplyr::select(-PROVINCIA_2017, -ITTER107),
         by = "hex_id",
         all.x = T)
+
+model_vars.df$ITTER107 <- 
+  hex_cause_death_prov_2017.df$ITTER107[match(model_vars.df$hex_id,
+                                              hex_cause_death_prov_2017.df$hex_id)]
 ```
 
 
@@ -394,6 +448,8 @@ model_vars.df$hotel_beds <-
                                hex_beds.df$hex_id)]
 
 model_vars.df$hotel_beds[is.na(model_vars.df$hotel_beds)] <- 0
+
+model_vars.df$hotel_beds_log <- log(model_vars.df$hotel_beds + 1)
 ```
 
 
@@ -429,7 +485,7 @@ model_vars.df$smokers <-
 
 ```{r}
 dat_health_status <- 
-  read.csv("../healt_status_reg/DCCV_AVQ_PERSONE_19062020065748989.csv") %>%
+  read.csv("../health_status_reg/DCCV_AVQ_PERSONE_19062020065748989.csv") %>%
   dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
                   !ITTER107 %in% c("ITFG","ITCD","ITD1","ITD2") & 
                   Misura == "per 100 persone con le stesse caratteristiche" &
@@ -443,6 +499,37 @@ dat_health_status$CODREG <-
 
 colnames(dat_health_status) <- 
   gsub("0_", "", colnames(dat_health_status))
+
+cancer_ita_reg_2019 <- 
+  read_excel("../health_status_reg/2019_cancro_ita_reg.xlsx")
+
+regioni_pop_2019 <- 
+  read.csv("../health_status_reg/regioni.csv", skip = 1) %>%
+  dplyr::filter(Età == "Totale") %>%
+  dplyr::select(Regione, Totale.Femmine, Totale.Maschi) %>%
+  dplyr::mutate(CODREG = 1:20)
+
+cancer_ita_reg_2019 <- 
+  merge(cancer_ita_reg_2019, regioni_pop_2019, by = "CODREG")
+
+cancer_ita_reg_2019 <-
+  cancer_ita_reg_2019 %>%
+  dplyr::mutate(perc_breast_cancer = 
+                  mammella_f / Totale.Femmine,
+                perc_colorectal_cancer = 
+                  (colonretto_m + colonretto_f) / 
+                  (Totale.Femmine + Totale.Maschi),
+                perc_lung_cancer = 
+                  (polmone_m + polmone_f) / 
+                  (Totale.Femmine + Totale.Maschi))
+
+dat_health_status <- 
+  merge(dat_health_status, 
+        cancer_ita_reg_2019 %>% 
+          dplyr::select(CODREG, 
+                        perc_breast_cancer, 
+                        perc_colorectal_cancer, 
+                        perc_lung_cancer), by = "CODREG")
 
 model_vars.df <- 
   merge(model_vars.df,
@@ -520,19 +607,24 @@ hex_wt_missing_value <-
 ```{r}
 model_vars_std.df <-
   model_vars.df %>%
-  dplyr::select(hex_id, day, perc_pop_lockdown,
+  dplyr::select(hex_id, CODREG, day, perc_pop_lockdown,
                 dist_sd_diff14, dist_sd_lag4_diff14, neigh_weighted_mean,
                 median_density_km2, gini_over74, 
                 no_conc, o3_conc, sia_conc, nmvoc_conc, pm2p5_conc, pm10_conc, co_conc, no2_conc, so2_conc,
-                cause_death_8, cause_death_7, cause_death_2_1_10, 
-                cause_death_2_1_4, cause_death_2_1_8, 
+                
+                era5_temp, era5_rhum, era5_prec,
+                
+                perc_breast_cancer, perc_colorectal_cancer, perc_lung_cancer, 
                 CHRONIC_DIAB, CHRONIC_HYP, CHRONIC_BRONC, CHRONIC_ALLER,
                 smokers,
-                hotel_beds,
+                hotel_beds_log,
                 P1, perc_over_65, pop_over_65, perc_work_outside_comune, 
                 perc_employed, perc_unemployed, perc_degree_over_workforce,
                 perc_families_over_4, 
-                sum_employees, perc_low_income, 
+                sum_agedcare_log10, sum_healthcare_log10, sum_manufacturing_log10, 
+                sum_services_log10, sum_warehousing_log10, sum_transport_log10, 
+                sum_delivery_log10,
+                perc_low_income, 
                 perc_neigh5_icu_beds, case_test_ratio) %>%
   dplyr::mutate_at(vars(dist_sd_diff14:case_test_ratio), scale)
 
@@ -547,63 +639,149 @@ pooled <-
        median_density_km2 +  
        pm2p5_conc + pm10_conc + no_conc + o3_conc + nmvoc_conc + sia_conc +
        co_conc + no2_conc + so2_conc +
-       cause_death_8 + cause_death_7 + cause_death_2_1_10 + 
-       cause_death_2_1_4 + cause_death_2_1_8 +
+       era5_temp + era5_rhum + era5_prec + 
+       perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
        CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER +
        smokers +
-       hotel_beds + 
+       hotel_beds_log + 
        perc_over_65 + gini_over74 + 
        perc_work_outside_comune +
        perc_families_over_4 + 
        perc_employed + perc_degree_over_workforce +
-       sum_employees + perc_low_income + 
-       perc_neigh5_icu_beds + case_test_ratio + day_num, 
+       sum_agedcare_log10 + sum_healthcare_log10 + sum_manufacturing_log10 + 
+       sum_services_log10 + sum_warehousing_log10 + sum_transport_log10 + 
+       sum_delivery_log10 + perc_low_income + 
+       perc_neigh5_icu_beds + case_test_ratio + as.factor(day_num), 
      data=model_vars_std.df)
 ```
 
 
+```{r fig.width=10, fig.height=13,eval=F}
+vars <- names(pooled$coefficients)
+vars <- vars[!grepl("(Intercept)|:", vars)]
+
+funPlot <- function(var) {
+  ggplot(model_vars_std.df) + geom_density(aes_string(var)) + theme_bw()
+}
+
+plotlist <- lapply(vars, funPlot)
+do.call("grid.arrange", c(plotlist, ncol=5))
+```
+
+
 ```{r}
-tidy(pooled) %>% 
-  filter(!grepl('^perc_pop_lockdown$|^dist_sd_lag4_diff14:perc_pop_lockdown$|^neigh_weighted_mean:perc_pop_lockdown$', term)) %>%
-  dwplot() %>% 
-  relabel_predictors(c(dist_sd_lag4_diff14 = "past excess mortality",
-                       neigh_weighted_mean = "nearby exces mortality",
-                       median_density_km2 = "median density",
-                       pm2p5_conc = "PM2.5 conc.",
-                       pm10_conc = "PM10 conc.",
-                       no_conc = "nitrogen monoxide conc.",
-                       o3_conc = "ozone conc.",
-                       nmvoc_conc = "Non-methane volatile organic compounds conc.", 
-                       sia_conc = "secondary inorganic aerosol conc.",
-                       co_conc = "carbon monoxide conc.",
-                       no2_conc = "nitrogen dioxide conc.",
-                       so2_conc = "sulphur dioxide",
-                       cause_death_8 = "cause death: respiratory (prov.)",
-                       cause_death_7 = "cause death: circulatory (prov.)",
-                       cause_death_2_1_10 = "cause death: breast cancer (prov.)",
-                       cause_death_2_1_4 = "cause death: colorectal cancer (prov.)",
-                       cause_death_2_1_8 = "cause death: lung cancer (prov.)",
-                       CHRONIC_DIAB = "perc. diabetes (reg.)",
-                       CHRONIC_HYP  = "perc. hypertension (reg.)", 
-                       CHRONIC_BRONC = "perc. bronchitis (reg.)", 
-                       CHRONIC_ALLER = "perc. allergies (reg.)",
-                       smokers = "perc. smokers (reg.)",
-                       hotel_beds = "n. hotel beds",
-                       perc_employed = "perc. employed",
-                       perc_degree_over_workforce = "perc. degree (over workforce)",
-                       perc_over_65 = "perc. over 65",
-                       gini_over74 = "over 74 conc.",
-                       perc_work_outside_comune = "perc. working out of comune",
-                       perc_families_over_4 = "perc. families over 4",
-                       sum_employees = "num. employees",
-                       perc_low_income = "perc. low income",
-                       case_test_ratio = "cases vs tests ratio (reg.)",
-                       perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
-                       day_num = "days since 24 Feb",
-                       `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near exces mortality",
-                       `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near excess mortality X lockdown")) +
-  labs(x="Effects (above zero is positive) on present excess mortality over 65") +
-  guides(color = FALSE) +
+predictor_labels <- 
+  c(dist_sd_lag4_diff14 = "past excess mortality",
+    neigh_weighted_mean = "nearby exces mortality",
+    median_density_km2 = "median density",
+    pm2p5_conc = "PM2.5 conc.",
+    pm10_conc = "PM10 conc.",
+    no_conc = "nitrogen monoxide conc.",
+    o3_conc = "ozone conc.",
+    nmvoc_conc = "Non-methane volatile organic compounds conc.", 
+    sia_conc = "secondary inorganic aerosol conc.",
+    co_conc = "carbon monoxide conc.",
+    no2_conc = "nitrogen dioxide conc.",
+    so2_conc = "sulphur dioxide",
+    
+    era5_temp = "temperature", 
+    era5_rhum = "relative humidity", 
+    era5_prec = "rain",
+    
+    perc_breast_cancer = "perc. breast cancer incidence (reg.)",
+    perc_colorectal_cancer = "perc. colorectal cancer incidence (reg.)",
+    perc_lung_cancer = "perc. lung cancer incidence (reg.)",
+    CHRONIC_DIAB = "perc. diabetes (reg.)",
+    CHRONIC_HYP  = "perc. hypertension (reg.)", 
+    CHRONIC_BRONC = "perc. bronchitis (reg.)", 
+    CHRONIC_ALLER = "perc. allergies (reg.)",
+    smokers = "perc. smokers (reg.)",
+    hotel_beds_log = "log. hotel beds",
+    perc_employed = "perc. employed",
+    perc_degree_over_workforce = "perc. degree (over workforce)",
+    perc_over_65 = "perc. over 65",
+    gini_over74 = "over 74 conc.",
+    perc_work_outside_comune = "perc. working out of comune",
+    perc_families_over_4 = "perc. families over 4",
+    sum_agedcare_log10 = "log. agedcare employees",
+    sum_healthcare_log10 = "log. healthcare employees",
+    sum_manufacturing_log10 = "log. manufactoring employees",
+    sum_services_log10 = "log. servics employees",
+    sum_warehousing_log10 = "log. warehousing employees",
+    sum_transport_log10 = "log. transport employees",
+    sum_delivery_log10  = "log. delivery employees",
+    perc_low_income = "perc. low income",
+    case_test_ratio = "cases vs tests ratio (reg.)",
+    perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
+    `dist_sd_lag4_diff14:perc_pop_lockdown` = "past excess mortality X lockdown",
+    `neigh_weighted_mean:perc_pop_lockdown` = "near excess mortality X lockdown",
+    `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near excess mortality",
+    `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near excess mortality X lockdown")
+```
+
+# Multilevel 
+
+```{r}
+library(lme4)
+multivel <- 
+  lmer(formula = dist_sd_diff14 ~ 1 +
+       dist_sd_lag4_diff14 *
+       neigh_weighted_mean *
+       perc_pop_lockdown +
+       median_density_km2 +  
+       pm2p5_conc + pm10_conc + no_conc + o3_conc + nmvoc_conc + sia_conc +
+       co_conc + no2_conc + so2_conc +
+       perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
+       CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER +
+       smokers +
+       hotel_beds_log + 
+       perc_over_65 + gini_over74 + 
+       perc_work_outside_comune +
+       perc_families_over_4 + 
+       perc_employed + perc_degree_over_workforce +
+       sum_agedcare_log10 + sum_healthcare_log10 + sum_manufacturing_log10 + 
+       sum_services_log10 + sum_warehousing_log10 + sum_transport_log10 + 
+       sum_delivery_log10 + perc_low_income + 
+       perc_neigh5_icu_beds + case_test_ratio + as.factor(day_num) + 
+         (1|CODREG),
+           data = model_vars_std.df)
+```
+
+
+```{r}
+
+pooled_coef.df <- 
+  as.data.frame(coef(summary(pooled))) %>%
+  dplyr::mutate(var = rownames(coef(summary(pooled))))
+
+multivel_coef.df <- 
+  as.data.frame(coef(summary(multivel))) %>%
+  dplyr::mutate(var = rownames(coef(summary(multivel))))
+
+models_coef.df <- 
+  rbind(pooled_coef.df %>% 
+          dplyr::select(Estimate, `Std. Error`, var) %>%
+          dplyr::mutate(model = "pooled"), 
+        multivel_coef.df %>% 
+          dplyr::select(Estimate, `Std. Error`, var) %>%
+          dplyr::mutate(model = "multilevel"))
+
+models_coef.df$label <- 
+  predictor_labels[match(models_coef.df$var, 
+                         names(predictor_labels))]
+
+models_coef.df$label <- factor(models_coef.df$label, 
+                               levels = rev(predictor_labels),
+                               ordered = T)
+
+models_coef.df %>%
+  dplyr::filter(!is.na(label)) %>%
+  ggplot(aes(colour = model, 
+             x=Estimate,
+             y=label)) +
+  geom_point() +
+  geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
+                    xmax=Estimate+`Std. Error`)) +
   theme_bw()
 ```
 

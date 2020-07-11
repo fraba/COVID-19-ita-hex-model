@@ -36,8 +36,8 @@ dates
 
 ```{r}
 
-load("../grid/hex_ita_1km.sf.RData")
-st_crs(hex_ita_1km.sf) <- 32632
+load("../grid/hex_ita_10km.sf.RData")
+st_crs(hex_ita_10km.sf) <- 32632
 hex_ita_1km.sf <- st_transform(hex_ita_1km.sf, 4326)
 
 fun1 <- function(i, var, hex_ita_1km.sf, dates) {
@@ -85,5 +85,126 @@ do.call("grid.arrange", c(plot.list, ncol=5))
 ```
 
 
+# Temperature & Humidity
+
+
+gdal_translate -a_srs EPSG:4326 .grib -of Gtiff .tif
+
+
+Files:
+adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.grib
+adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.grib
+adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.grib
+adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.grib
+
+Commands:
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.grib -of Gtiff adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.grib -of Gtiff adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.grib -of Gtiff adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.grib -of Gtiff adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.tif
+
+```{r}
+load("../grid/hex_ita_10km.sf.RData")
+st_crs(hex_ita_10km.sf) <- 32632
+require(raster)
+require(sf)
+require(sp)
+
+dates <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2020-07-05"),
+      by = "day")
+
+prec.r <- 
+  brick('adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.tif')
+names(prec.r) <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2020-07-05"),
+      by = "day")
+
+temp.r <- 
+  brick('adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.tif')
+names(temp.r) <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2020-07-05"),
+      by = "day")
+
+pres.r <- 
+  brick('adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.tif')
+names(pres.r) <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2020-07-05"),
+      by = "day")
+
+dewp.r <- 
+  brick('adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.tif')
+names(dewp.r) <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2020-07-05"),
+      by = "day")
+
+crs(r) <- 
+  "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0" 
+
+ita.sp <- 
+  readRDS("gadm36_ITA_0_sp.rds")
+
+hex_ita_10km.sp <- 
+  as_Spatial(hex_ita_10km.sf %>% st_transform(4326))
+
+temp.extr <- 
+  raster::extract(temp.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+prec.extr <- 
+  raster::extract(prec.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+pres.extr <- 
+  raster::extract(pres.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+dewp.extr <- 
+  raster::extract(dewp.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+
+era5_climate_hex.df <- data.frame()
+
+for (i in 1:length(dates)) {
+  print(i)
+  era5_climate_hex.df <-
+    rbind(era5_climate_hex.df,
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'temp',
+                     value = temp.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'prec',
+                     value = prec.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'pres',
+                     value = pres.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'dewp',
+                     value = dewp.extr[,i]))
+}
+
+save(era5_climate_hex.df, file = "era5_climate_hex.df.RData")
+
+
+test.sf <- 
+  hex_ita_10km.sf
+
+test.sf$value <- dewp.extr[,10]
+
+ggplot(test.sf) + geom_sf(aes(fill = value), colour = NA)
+```
 
 
