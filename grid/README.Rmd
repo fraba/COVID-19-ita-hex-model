@@ -137,9 +137,17 @@ sez2011_industry.df <-
         agedcare = 
           extractAtecoD3(ATECO3) %in% 873)
 
+sez2011_industry.df$manufacturing.meat <- 
+  extractAtecoD3(sez2011_industry.df$ATECO3) == 101
+
+sez2011_industry.df$manufacturing.ex_meat <- 
+  sez2011_industry.df$manufacturing & !sez2011_industry.df$manufacturing.meat
+
+sez2011_industry.df$manufacturing <- NULL
+
 res <- 
   apply(sez2011_industry.df %>% 
-        select(manufacturing:agedcare), 
+        select(construction:manufacturing.ex_meat), 
       1, 
       function(x) ifelse(length(names(x)[x]) > 0, names(x)[x], NA))
 
@@ -147,7 +155,9 @@ sez2011_industry.df$ATECO3_code <- res
   
 sez2011_industry.df <- 
   sez2011_industry.df %>%
-  dplyr::select(-manufacturing, -construction, -wholesaling, -retail, -transport, -warehousing, -delivery, -hospitality, -services, -education, -healthcare, -agedcare)
+  dplyr::select(-manufacturing.meat, -manufacturing.ex_meat, -construction, 
+                -wholesaling, -retail, -transport, -warehousing, -delivery, -hospitality,
+                -services, -education, -healthcare, -agedcare)
 
 
 sez2011_industry.df$ATECO3_code[is.na(sez2011_industry.df$ATECO3_code)] <- 'other'
@@ -192,10 +202,14 @@ hex_industry.df <-
                      sum(ADDETTI[ATECO3_code == "hospitality"]) + 
                      sum(ALTRI_RETRIB[ATECO3_code == "hospitality"]) + 
                      sum(VOLONTARI[ATECO3_code == "hospitality"]),
-                   sum_manufacturing = 
-                     sum(ADDETTI[ATECO3_code == "manufacturing"]) + 
-                     sum(ALTRI_RETRIB[ATECO3_code == "manufacturing"]) + 
-                     sum(VOLONTARI[ATECO3_code == "manufacturing"]),
+                    sum_manufacturing.ex_meat = 
+                     sum(ADDETTI[ATECO3_code == "manufacturing.ex_meat"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "manufacturing.ex_meat"]) + 
+                     sum(VOLONTARI[ATECO3_code == "manufacturing.ex_meat"]),
+                   sum_manufacturing.meat = 
+                     sum(ADDETTI[ATECO3_code == "manufacturing.meat"]) + 
+                     sum(ALTRI_RETRIB[ATECO3_code == "manufacturing.meat"]) + 
+                     sum(VOLONTARI[ATECO3_code == "manufacturing.meat"]),
                    sum_other = 
                      sum(ADDETTI[ATECO3_code == "other"]) + 
                      sum(ALTRI_RETRIB[ATECO3_code == "other"]) + 
@@ -237,7 +251,7 @@ ggplot(hex_ita_10km.sf) +
   scale_fill_viridis()
 
 ggplot(hex_ita_10km.sf) +
-  geom_sf(aes(fill = log(sum_manufacturing / P1)+1), colour = NA) +
+  geom_sf(aes(fill = log(sum_manufacturing.meat / P1)+1), colour = NA) +
   scale_fill_viridis()
 ```
 
