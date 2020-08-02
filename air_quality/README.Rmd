@@ -207,4 +207,112 @@ test.sf$value <- dewp.extr[,10]
 ggplot(test.sf) + geom_sf(aes(fill = value), colour = NA)
 ```
 
+# Europe air quality
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182248.5360487-22339-5-609faa4c-09e0-4d9a-9dbe-bbe268b3d9a3.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1596182248.5360487-22339-5-609faa4c-09e0-4d9a-9dbe-bbe268b3d9a3.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182206.7649863-17613-19-e6d50fd9-23e2-4df2-9246-edd8a5a26a40.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1596182206.7649863-17613-19-e6d50fd9-23e2-4df2-9246-edd8a5a26a40.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182217.0965886-2336-10-5d04ee02-99d2-4ec0-a363-c05df4880359.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1596182217.0965886-2336-10-5d04ee02-99d2-4ec0-a363-c05df4880359.tif 
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182239.3134377-26085-2-511e1ae7-853a-4e7e-af36-8d90070cd541.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1596182239.3134377-26085-2-511e1ae7-853a-4e7e-af36-8d90070cd541.tif 
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182225.2788684-23525-8-2ed5cc6b-7ba3-4d0c-a153-ff84a9588882.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1596182225.2788684-23525-8-2ed5cc6b-7ba3-4d0c-a153-ff84a9588882.tif 
+
+
+
+```{r}
+require(raster)
+require(sf)
+require(sp)
+
+dates <- seq(from = as.Date("2020-02-11"), to = as.Date("2020-02-23"), by = 1)
+
+europe.sf <- 
+  read_sf("../shapefile/Europe/CNTR_BN_60M_2020_4326.shp")
+
+region.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+
+europe_box.sf <- 
+  sf::st_sfc(list(st_polygon(list(matrix(c(-15.1, 29.3, 29.3, -15.1, -15.1,
+                           62.1,  62.1,  35.9,  35.9,  62.1), , 2))))) %>%
+  st_as_sf( crs = 4326)
+
+no.r <- 
+  brick("adaptor.cams_regional_fc.retrieve-1596182206.7649863-17613-19-e6d50fd9-23e2-4df2-9246-edd8a5a26a40.tif")
+no.r <-
+  crop(no.r, europe_box.sf)
+
+no2.r <- 
+  brick("adaptor.cams_regional_fc.retrieve-1596182239.3134377-26085-2-511e1ae7-853a-4e7e-af36-8d90070cd541.tif")
+no2.r <-
+  crop(no2.r, europe_box.sf)
+
+co.r <-
+  brick("adaptor.cams_regional_fc.retrieve-1596182248.5360487-22339-5-609faa4c-09e0-4d9a-9dbe-bbe268b3d9a3.tif")
+co.r <-
+  crop(co.r, europe_box.sf)
+
+pm2p5.r <-
+  brick("adaptor.cams_regional_fc.retrieve-1596182217.0965886-2336-10-5d04ee02-99d2-4ec0-a363-c05df4880359.tif ")
+pm2p5.r <-
+  crop(pm2p5.r, europe_box.sf)
+
+pm10.r <-
+  brick("adaptor.cams_regional_fc.retrieve-1596182225.2788684-23525-8-2ed5cc6b-7ba3-4d0c-a153-ff84a9588882.tif ")
+pm10.r <-
+  crop(pm10.r, europe_box.sf)
+
+savePlot <- function(r, label) {
+  
+  these_spdf <- list()
+  for (i in 1:length(dates)) {
+    these_spdf[[i]] <- as(r[[i]], "SpatialPixelsDataFrame")
+    these_spdf[[i]] <- as.data.frame(these_spdf[[i]])
+    colnames(these_spdf[[i]]) <- c("value", "x", "y")
+  }
+  
+  plotEur <- function(i, label) {
+    ggplot() +
+      geom_tile(data = these_spdf[[i]], aes(x=x, y=y, fill=value), alpha=0.8) +
+      geom_sf(data = europe.sf, fill = NA, size = .2, alpha = .5, 
+              colour = 'white') +
+      coord_sf(xlim = c(-15.1, 29.3), ylim = c(35.9, 62.1)) +
+      scale_fill_viridis() +
+      labs(x = NULL, y = NULL, title = paste0(label," ", format(dates[[i]],"%d %b %Y")), fill = NULL) +
+      theme_bw()
+  }
+  
+  these_eur_plots <- lapply(1:12, plotEur, label)
+  
+  plotNorthIta <- function(i, label) {
+    ggplot() +
+      geom_tile(data = these_spdf[[i]], aes(x=x, y=y, fill=value), alpha=0.8) +
+      geom_sf(data = region.sf %>% st_transform(4326), fill = NA, 
+              size = .2, alpha = .5, colour = 'white') +
+      coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+      scale_fill_viridis() +
+      labs(x = NULL, y = NULL, title = paste0(label," ", format(dates[[i]],"%d %b %Y")), fill = NULL) +
+      theme_bw()
+  }
+  
+  these_northita_plots <- lapply(1:12, plotNorthIta, label)
+  
+  ggsave(file = sprintf("../fig/airquality_eur_%s_eur.png", label), width = 18, height = 8,
+         arrangeGrob(grobs = these_eur_plots, ncol = 4))
+  
+  ggsave(file = sprintf("../fig/airquality_northita_%s.png", label), width = 18, height = 8,
+         arrangeGrob(grobs = these_northita_plots, ncol = 4))
+}
+
+savePlot(pm10.r, label ="PM10")
+savePlot(pm2p5.r, label ="PM2.5")
+savePlot(co.r, label ="Carbon monoxide")
+savePlot(no2.r, label ="Nitrogen dioxide")
+savePlot(no.r, label ="Nitrogen monoxide")
+
+```
+
+
 

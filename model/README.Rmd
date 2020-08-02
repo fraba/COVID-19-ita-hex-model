@@ -1,5 +1,5 @@
 ---
-title: "Model"
+title: "Supplemental material"
 output: html_document
 ---
 
@@ -9,7 +9,7 @@ Key columns:
 * `CODREG`: numeric
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache = T)
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE, include=FALSE)
 
 library(sf)
 library(ggplot2)
@@ -25,6 +25,14 @@ library(dotwhisker)
 library(knitr)
 library(readxl)
 library(humidity)
+library(raster)
+library(viridis)
+library(stargazer)
+library(tibble)
+library(ggrepel)
+library(gridExtra)
+library(cowplot)
+library(igraph)
 ```
 
 ```{r}
@@ -35,6 +43,7 @@ load("../dead/hex_dead.df.RData")
 load("../covid-cases-prov/reg_testing.df.RData")
 load("../locked-down-comune/hex_pop_lockdown.RData")
 load("../pop_density/pop_densities.df.RData")
+load("../roads/ita_osm_roads.sf.RData")
 ```
 
 ```{r}
@@ -45,6 +54,47 @@ hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Emilia-Romagna"] <- '8'
 hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Liguria"] <- '7'
 ```
 
+# Hexagonal Grid
+
+```{r}
+ggsave(file = "../fig/hex_grid.pdf", width = 8, height = 10,
+       ggplot(hex_ita_10km.sf %>% filter(!is.na(P1))) +
+         geom_sf(fill = 'red', size = .5) +
+         theme_bw() +
+         labs(#title = "Hexagonal grid",
+              # caption = sprintf("Hexagonal cell n: %s, cell size: 10 km; Cell area: %s km2\nNote: Cells with zero population based on 2011 census have been removed.",
+              #                   nrow(hex_ita_10km.sf %>% filter(!is.na(P1))), 
+              #                   round(mean(st_area(hex_ita_10km.sf %>% filter(!is.na(P1)))) / 1000000, 2)),
+              x = NULL, y = NULL))
+```
+
+
+```{r}
+italy_comune.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_clipped_to_hex.shp")
+
+ita_reg.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+
+ggsave(file = "../fig/comune_lombardy.pdf", 
+       ggplot() +  
+         scale_fill_viridis() +
+         geom_sf(data = italy_comune.sf %>% 
+                   dplyr::filter(COD_REG == 3)  
+                 %>% st_transform(4326), 
+                 colour = 'red', size = 0.3, fill = NA) +
+         geom_sf(data = hex_ita_10km.sf %>% 
+                   st_transform(4326), 
+                 fill = NA, colour = "white", alpha = .5) +
+         geom_sf(data = ita_reg.sf %>% 
+                   filter(COD_REG == 3), 
+                 fill = NA, 
+                 colour = 'white', size = 1.5) +
+         coord_sf(xlim = c(8.51475, 11.31198), 
+                  ylim = c(44.69240, 46.58386)) +
+         labs(x = NULL, y = NULL) +
+         guides(fill = FALSE))
+```
 
 # Variables
 
@@ -57,11 +107,10 @@ m <-
               unique(hex_dead.df$day))
 names(m) <- c("hex_id","year","day")
 
-hex_dead.df <- merge(hex_dead.df, m, by = c("hex_id","year","day"), all.y = T)
+hex_dead.df <- 
+  merge(hex_dead.df, m, 
+        by = c("hex_id","year","day"), all.y = T)
 hex_dead.df$Freq[is.na(hex_dead.df$Freq)] <- 0
-
-# hex_dead.df$bin_pop_out_lockdown <- 
-
 
 hex_dead.df <-
   hex_dead.df %>%
@@ -88,16 +137,17 @@ hex_dead_wide.df$dist_sd <-
 
 hex_dead_wide.df$dist_sd[is.nan(hex_dead_wide.df$dist_sd)] <- 0
 
+## NOTE: Here we set interval infection - death
 hex_dead_wide.df <-
   hex_dead_wide.df %>%
   dplyr::group_by(hex_id) %>%
   dplyr::arrange(day) %>%
-  mutate(dist_sd_diff14 = c(dist_sd[14:length(dist_sd)], rep(NA, 13)))
+  mutate(dist_sd_diff17 = c(dist_sd[17:length(dist_sd)], rep(NA, 16)))
 
 save(hex_dead_wide.df, file = "hex_dead_wide.df")
 
 model_vars.df <- 
-  hex_dead_wide.df[,c('hex_id', 'day', 'dist_sd_diff14')]
+  hex_dead_wide.df[,c('hex_id', 'day', 'dist_sd_diff17')]
 
 model_vars.df$hex_id <- as.integer(model_vars.df$hex_id)
 model_vars.df$day <- as.Date(paste0(model_vars.df$day,"-2020"), "%m%d-%Y")
@@ -122,7 +172,7 @@ hex_dead_wide.df <-
   hex_dead_wide.df %>%
   dplyr::group_by(hex_id) %>%
   dplyr::arrange(day) %>%
-  mutate(dist_sd_lag4_diff14 = c(dist_sd[14:length(dist_sd)], rep(NA, 13)))
+  mutate(dist_sd_lag4_diff17 = c(dist_sd[17:length(dist_sd)], rep(NA, 16)))
 
 hex_dead_wide.df$hex_id <- 
   as.integer(hex_dead_wide.df$hex_id)
@@ -131,30 +181,79 @@ hex_dead_wide.df$day <-
 
 model_vars.df <- 
   merge(model_vars.df, 
-        hex_dead_wide.df %>% select(hex_id, day, dist_sd_lag4_diff14), 
+        hex_dead_wide.df %>% dplyr::select(hex_id, day, dist_sd_lag4_diff17), 
         by = c("hex_id", "day"))
 
 model_vars.df <- 
-  model_vars.df %>% filter(day < as.Date("2020-04-15"))
-
+  model_vars.df %>% filter(day < as.Date("2020-05-15"))
 ```
+
 
 ## Imputation
 
 ```{r}
-model_vars.df$dist_sd_diff14[
-  !is.finite(model_vars.df$dist_sd_diff14)] <- 0
-model_vars.df$dist_sd_lag4_diff14[
-  !is.finite(model_vars.df$dist_sd_lag4_diff14)] <- 0
-
-ggplot(model_vars.df %>% filter(hex_id == 1000), aes(x=day)) + 
-  geom_line(aes(y=dist_sd_diff14), colour = 'red') +
-  geom_line(aes(y=dist_sd_lag4_diff14), colour = 'blue')
-
+model_vars.df$dist_sd_diff17[
+  !is.finite(model_vars.df$dist_sd_diff17)] <- 0
+model_vars.df$dist_sd_lag4_diff17[
+  !is.finite(model_vars.df$dist_sd_lag4_diff17)] <- 0
 ```
 
 
 ## Air quality
+
+### Raw data format
+
+```{r}
+r <- 
+  raster('../air_quality/pm10_conc.tiff', band = 1)
+
+r_spdf <- as(r, "SpatialPixelsDataFrame")
+r_spdf <- as.data.frame(r_spdf)
+colnames(r_spdf) <- c("value", "x", "y")
+
+ggsave(file = "../fig/cams_lombardy.pdf", 
+       ggplot() +  
+         geom_tile(data=r_spdf, aes(x=x, y=y, fill=value), alpha=0.8, colour = 'white') +
+         scale_fill_viridis() +
+         geom_sf(data = hex_ita_10km.sf %>% st_transform(4326), 
+                 fill = NA, colour = "white") +
+         geom_sf(data = ita_reg.sf %>% filter(COD_REG == 3), 
+                 fill = NA, 
+                 colour = 'white', size = 1.5) +
+         coord_sf(xlim = c(8.51475, 11.31198), 
+                  ylim = c(44.69240, 46.58386)) +
+         labs(#title = "CAMS European air quality forecast grid and hexagonal grid in Lombardy",
+              #caption = "CAMS cell size: 10 km approx.",
+              x = NULL, y = NULL) +
+         guides(fill = FALSE))
+```
+
+
+```{r}
+r <- 
+  raster('../air_quality/adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.tif', band = 1)
+
+r_spdf <- as(r, "SpatialPixelsDataFrame")
+r_spdf <- as.data.frame(r_spdf)
+colnames(r_spdf) <- c("value", "x", "y")
+
+ggsave(file = "../fig/era5_lombardy.pdf", 
+       ggplot() +  
+         geom_tile(data=r_spdf, aes(x=x, y=y, fill=value), alpha=0.8, colour = 'white') +
+         scale_fill_viridis() +
+         geom_sf(data = hex_ita_10km.sf %>% st_transform(4326), 
+                 fill = NA, colour = "white") +
+         geom_sf(data = ita_reg.sf %>% filter(COD_REG == 3), 
+                 fill = NA, 
+                 colour = 'white', size = 1.5) +
+         coord_sf(xlim = c(8.51475, 11.31198), 
+                  ylim = c(44.69240, 46.58386)) +
+         labs(# title = "ERA5 grid and hexagonal grid in Lombardy",
+           # caption = "ERA5 cell size: 31 km approx.",
+           x = NULL, y = NULL) +
+         guides(fill = FALSE))
+```
+
 
 ```{r}
 names(airquality.df)[2] <- "day"
@@ -163,12 +262,13 @@ airquality_spread.df <-
 
 airquality_spread.df <- 
   airquality_spread.df %>%
-  select(-pmwf_conc, -ecwb_conc, -ecff_conc)
+  dplyr::select(-pmwf_conc, -ecwb_conc, -ecff_conc)
 
 model_vars.df <- 
   merge(model_vars.df, airquality_spread.df, by = c("hex_id","day"), all.x = T)
 ```
 
+## Atmosphere 
 
 ```{r}
 era5_climate_hex.df$day <- era5_climate_hex.df$date
@@ -262,6 +362,262 @@ model_vars.df <-
   model_vars.df %>%
   mutate_at(.vars = vars(sum_employees:sum_wholesaling),
             .funs = list(log10 = myLog10))
+```
+
+
+```{r}
+ggsave(file = "../fig/excess_mortality_ts.pdf", width = 7, height = 4,
+       model_vars.df %>%
+         dplyr::group_by(day) %>%
+         dplyr::summarize(perc005 = quantile(dist_sd_diff17, .005),
+                          perc985 = quantile(dist_sd_diff17, .985),
+                          mean = mean(dist_sd_diff17),
+                          medianLOM = median(dist_sd_diff17[REGIONE == "Lombardia"]), 
+                          medianBG = median(dist_sd_diff17[PROVINCIA == "Bergamo"])) %>%
+         ggplot(aes(x = day)) +
+         geom_ribbon(aes(ymin = perc005, ymax = perc985, fill = 'red'), 
+                     colour = 'red', alpha = .5) +
+         geom_line(aes(y=mean, linetype = "1")) +
+         geom_line(aes(y=medianLOM, linetype = "2")) +
+         geom_line(aes(y=medianBG, linetype = "3")) +
+         geom_text_repel(data = data.frame(label = c("2 Mar", "8 Mar", "11 Feb"),
+                                           day = as.Date(c("2020-03-02", "2020-03-08", "2020-02-11")),
+                                           value = c(21.75316069, 10, 0.2390457)),
+                         aes(label = label, x=day, y=value),
+                         nudge_x      = - 30,
+                         nudge_y = + 10,
+                         segment.size  = .15,
+                         segment.color = "grey40",
+                         direction     = "y") +
+         geom_vline(xintercept = as.Date("2020-03-08"), size = .35, alpha = .35) +
+         theme_bw() +
+         scale_fill_identity(name = NULL, guide = 'legend',labels = c('99% distribution')) +
+         scale_x_date(limits = c(as.Date("2020-01-01"), as.Date("2020-05-10"))) +
+         scale_linetype_manual(name = NULL,
+                               values =c('1'=1,'2'=2,'3'=4), labels = c('Italy (mean)','Lombardia (median)','Province of Bergamo (median)')) +
+         labs(x = NULL, y = "excess mortality") +
+         theme(legend.position = c(.8, .7))
+       )
+
+
+# 
+peak_median_hex_id <- 
+  model_vars.df %>%
+  dplyr::filter(day >= as.Date("2020-03-08") - 10 &
+                day <= as.Date("2020-03-08") + 10) %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarise(excess_mortality = median(dist_sd_diff17))
+
+early_median_hex_id <- 
+  model_vars.df %>%
+  dplyr::filter(day >= as.Date("2020-02-11") &
+                day < as.Date("2020-02-23")) %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarise(excess_mortality = median(dist_sd_diff17))
+
+early2_median_hex_id <- 
+  model_vars.df %>%
+  dplyr::filter(day >= as.Date("2020-02-23") &
+                day <= as.Date("2020-02-24")) %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarise(excess_mortality = median(dist_sd_diff17))
+
+hex_ita_10km_excess_mortality.sf <- hex_ita_10km.sf
+hex_ita_10km_excess_mortality.sf$peak_median <- 
+  peak_median_hex_id$excess_mortality[match(hex_ita_10km_excess_mortality.sf$hex_id, 
+                                          peak_median_hex_id$hex_id)]
+
+hex_ita_10km_excess_mortality.sf$early_median <- 
+  early_median_hex_id$excess_mortality[match(hex_ita_10km_excess_mortality.sf$hex_id, 
+                                             early_median_hex_id$hex_id)]
+
+hex_ita_10km_excess_mortality.sf$early2_median <- 
+  early2_median_hex_id$excess_mortality[match(hex_ita_10km_excess_mortality.sf$hex_id, 
+                                             early2_median_hex_id$hex_id)]
+
+model_vars_11feb.df <- 
+  model_vars.df[model_vars.df$day == "2020-02-11",]
+
+model_vars_20feb.df <- 
+  model_vars.df[model_vars.df$day == "2020-02-20",]
+
+hex_ita_10km_excess_mortality.sf$dist_sd_diff17_20feb <- 
+  model_vars_20feb.df$dist_sd_diff17[match(hex_ita_10km_excess_mortality.sf$hex_id,
+                                          model_vars_20feb.df$hex_id)]
+
+hex_ita_10km_excess_mortality.sf$dist_sd_diff17_11feb <- 
+  model_vars_11feb.df$dist_sd_diff17[match(hex_ita_10km_excess_mortality.sf$hex_id,
+                                          model_vars_11feb.df$hex_id)]
+
+
+lockdown_23feb.sf <- 
+  rbind(st_sf(a = 1, 
+              geom = italy_comune.sf %>% 
+                dplyr::filter(PRO_COM_T %in% 
+                                c("098010","098014","098026", "098019",
+                                  "098035","098054","098002","098057",
+                                  "098062","098047")) %>%
+                st_union()),
+        st_sf(a=1,
+              geom = italy_comune.sf %>% 
+                dplyr::filter(PRO_COM_T %in% "028105") %>%
+                st_union())
+  )
+
+early_hotspots.sf <- 
+  rbind(st_sf(a = 1,
+        geom = italy_comune.sf %>% 
+                dplyr::filter(PRO_COM_T %in% 
+                                c("016144","016008")) %>%
+                st_union()),
+        st_sf(a = 1,
+        geom = italy_comune.sf %>% 
+                dplyr::filter(PRO_COM_T %in% 
+                                '041044') %>%
+                st_union()))
+        
+lockdown_23feb_centroid.df <- 
+  as.data.frame(st_coordinates(st_centroid(lockdown_23feb.sf %>%
+                                             st_transform(4326))))
+lockdown_23feb_centroid.df$label <- 
+  c("Codogno",
+    "Vo'")
+
+early_hotspots_centroid.df <- 
+  as.data.frame(st_coordinates(st_centroid(early_hotspots.sf %>%
+                                             st_transform(4326))))
+early_hotspots_centroid.df$label <- 
+  c("Nembro and Alzano Lombardo",
+    "Pesaro")
+
+
+ggsave(file = "../fig/excess_mortality_north_map.pdf", width = 10, height = 12,
+       grid.arrange(
+         ggplot(hex_ita_10km_excess_mortality.sf %>% 
+                  st_transform(4326) %>%
+                  dplyr::filter(!is.na(early_median))) +
+           geom_sf(aes(fill = cut(early_median, c(-Inf,4,5,6,7,8,Inf))), colour = NA) +
+           scale_fill_brewer(palette = "Reds", 
+                             direction = 1, na.value = "white",
+                             drop = FALSE) + 
+           geom_sf(data = lockdown_23feb.sf, fill = NA, size = .35, 
+                   colour = "#31a354") +
+           geom_sf(data = ita_reg.sf,
+                   fill = NA,
+                   colour = 'grey', size = .2, alpha = .5) +
+           geom_sf(data = ita_osm_roads.sf, 
+                   size = .15, alpha = .25) +
+           coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+           geom_label_repel(data = lockdown_23feb_centroid.df[1,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = - 10,
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = lockdown_23feb_centroid.df[2,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = + 10,
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = early_hotspots_centroid.df[1,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = early_hotspots_centroid.df[2,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = 10,
+                            nudge_y = 1,
+                            segment.size = .1) +
+           theme_bw() +
+           labs(fill = "excess mortality", x = NULL, y = NULL),
+         
+         ggplot(hex_ita_10km_excess_mortality.sf %>% 
+                  st_transform(4326) %>%
+                  dplyr::filter(!is.na(early2_median))) +
+           geom_sf(aes(fill = cut(early2_median, c(-Inf,4,5,6,7,8,Inf))), colour = NA) +
+           scale_fill_brewer(palette = "Reds", 
+                             direction = 1, na.value = "white",
+                             drop = FALSE) + 
+           geom_sf(data = lockdown_23feb.sf, fill = NA, size = .35, 
+                   colour = "#31a354") +
+           geom_sf(data = ita_reg.sf,
+                   fill = NA,
+                   colour = 'grey', size = .2, alpha = .5) +
+           geom_sf(data = ita_osm_roads.sf, 
+                   size = .15, alpha = .25) +
+           coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+           geom_label_repel(data = lockdown_23feb_centroid.df[1,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = - 10,
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = lockdown_23feb_centroid.df[2,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = + 10,
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = early_hotspots_centroid.df[1,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_y = 10, 
+                            segment.size = .1) +
+           geom_label_repel(data = early_hotspots_centroid.df[2,],
+                            aes(x=X,y=Y,label=label),
+                            nudge_x = 10,
+                            nudge_y = 1,
+                            segment.size = .1) +
+           theme_bw() +
+           labs(fill = "excess mortality", x = NULL, y = NULL),
+         nrow = 2))
+
+over5sd_hex_id <- 
+  model_vars.df %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::summarise(days_over5sd = sum(dist_sd_diff17>5)>=10)
+
+hex_ita_10km_excess_mortality.sf$days_over5sd <- 
+  over5sd_hex_id$days_over5sd[match(hex_ita_10km_excess_mortality.sf$hex_id, 
+                                    over5sd_hex_id$hex_id)]
+
+ggsave(file = "../fig/excess_mortality_map.pdf", width = 14, height = 9,
+       plot_grid(
+         ggplot(hex_ita_10km_excess_mortality.sf) +
+           geom_sf(aes(fill = peak_median), colour = NA) +
+           scale_fill_distiller(palette = "Reds", direction = 1, na.value = "white") +
+           geom_sf(data = ita_reg.sf,
+                   fill = NA,
+                   colour = 'white', size = .2, alpha = .5) +
+           theme_bw() +
+           labs(fill = "excess mortality") +
+           theme(legend.position = 'bottom'),
+         ggplot(hex_ita_10km_excess_mortality.sf %>%
+                  dplyr::filter(!is.na(P1))) +
+           geom_sf(aes(fill = days_over5sd), colour = NA) +
+           scale_fill_brewer(palette = "Set2", labels = c("<10", "+10")) + 
+           geom_sf(data = ita_reg.sf,
+                   fill = NA,
+                   colour = 'white', size = .2, alpha = .5) +
+           geom_sf(data = ita_osm_roads.sf, 
+                   size = .15, alpha = .25, colour = "gray40") +
+           theme_bw() +
+           labs(fill = "Days with excess mortality") +
+           theme(legend.position = 'bottom'),
+         align = "h",
+         ncol = 2)
+)
+
+# ggplot(hex_ita_10km_excess_mortality.sf %>%
+#          dplyr::filter(!is.na(P1)) %>%
+#          st_transform(4326)) +
+#   geom_sf(aes(fill = value), colour = NA, alpha = .5) +
+#   scale_fill_brewer(palette = "Set2", labels = c("<10", "+10")) + 
+#   geom_sf(data = ita_roads.sf %>% dplyr::filter(grepl("^A",ref)), 
+#           colour = "darkgray", alpha = .95, size = .4) +
+#   geom_sf(data = ita_reg.sf,
+#           fill = NA,
+#           colour = 'white', size = .2, alpha = .5) +
+#   coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+#   theme_bw() +
+#   guides(fill = FALSE)
+
 
 ```
 
@@ -279,7 +635,8 @@ ggplot(reg_testing.df, aes(x=date, y=case_test_ratio)) +
 model_vars.df <- 
   merge(model_vars.df, reg_testing.df, 
         by.x = c("CODREG", "day"), 
-        by.y = c("codice_regione", "date"))
+        by.y = c("codice_regione", "date"),
+        all.x = TRUE)
 ```
 
 ## Lock Down
@@ -359,25 +716,68 @@ model_vars.df %>%
   ggplot(aes(x=day,y=ld)) +
   geom_bar(stat='identity')
 
+## Days since total lockdown
+
+model_vars.df <- 
+  model_vars.df %>%
+  dplyr::group_by(hex_id) %>%
+  dplyr::arrange(day) %>%
+  dplyr::mutate(dist_tot_lockdown = 
+                  seq(1 - which(perc_pop_lockdown == 1)[1], 
+                      n() - which(perc_pop_lockdown == 1)[1]))
+
 ```
 
 
-# Neighbours
+# Neighbours (using communiting weighted network)
 
 ```{r}
-hex_ita_10km.nb <- 
-  poly2nb(hex_ita_10km.sf %>% filter(CODREG == 3), 
-          queen=TRUE)
-coords <- 
-  st_coordinates(st_centroid(st_geometry(hex_ita_10km.sf %>% filter(CODREG == 3))))
+load("../comm-matrix/hex_commuting_net.g.RData")
 
-plot(st_geometry(hex_ita_10km.sf %>% filter(CODREG == 3)), border="grey")
-plot(hex_ita_10km.nb, coords, col="red", add = TRUE)
+hex_commuting_net.el <- 
+  as.data.frame(as_edgelist(hex_commuting_net.g, names = TRUE))
+hex_commuting_net.el$n <- 
+  E(hex_commuting_net.g)$n
 
-hex_ita_10km.nb <- 
-  poly2nb(hex_ita_10km.sf, queen=TRUE)
-
-all_days <- unique(model_vars.df$day)
+funNeighNet <- function(hex_id, hex_commuting_net.el, model_vars.df) {
+  
+  require(dplyr)
+  
+  res.df <- 
+    data.frame()
+  base_el.df <- 
+    hex_commuting_net.el[hex_commuting_net.el$V1 == hex_id |
+                           hex_commuting_net.el$V2 == hex_id,]
+  
+  if(nrow(base_el.df) == 0) {return()}
+  
+  base_el.df$from <- 
+    hex_id
+  base_el.df$to <- 
+    apply(base_el.df[,1:2], 1, 
+          FUN = function(x) c(x)[which(c(x) != hex_id)])
+  
+  all_days.df <- 
+    model_vars.df[model_vars.df$hex_id %in% base_el.df$to,
+                  c("hex_id",
+                    "day",
+                    "dist_sd_diff17")]
+  
+  all_days.df$n <- 
+      base_el.df$n[match(all_days.df$hex_id,
+                         base_el.df$to)]
+  
+  res.df <- 
+    all_days.df %>%
+    dplyr::group_by(day) %>%
+    dplyr::summarise(neigh_weighted_mean = 
+                       weighted.mean(dist_sd_diff17,
+                                     w = n))
+  
+  res.df$hex_id <- hex_id
+  
+  return(res.df)
+}
 
 funNeigh1 <- function(i, hex_ita_10km.nb, all_days, model_vars.df) {
   res.df <- data.frame()
@@ -386,35 +786,36 @@ funNeigh1 <- function(i, hex_ita_10km.nb, all_days, model_vars.df) {
     this.df <- 
       model_vars.df[model_vars.df$day == all_days[j] &
                       model_vars.df$hex_id %in% these_neigh,
-                    c("dist_sd_diff14", 
+                    c("dist_sd_diff17", 
                       "perc_pop_out_lockdown",
                       "P1")]
     res.df <- rbind(res.df, 
                     data.frame(hex_id = i,
                                day = all_days[j],
                                neigh_weighted_mean = 
-                                 weighted.mean(this.df$dist_sd_diff14,
-                                               w = this.df$perc_pop_out_lockdown * this.df$P1)))
+                                 weighted.mean(this.df$dist_sd_diff17,
+                                               w = this.df$P1)))
   }
   return(res.df)
 }
 
 cl <- makeCluster(10)
 neigh.list <- 
-  parLapply(cl, hex_ita_10km.df$hex_id, funNeigh1, 
-            hex_ita_10km.nb, all_days, model_vars.df)
+  parLapply(cl, hex_ita_10km.df$hex_id, funNeighNet, 
+            hex_commuting_net.el, model_vars.df)
 neigh.df <- bind_rows(neigh.list)
 stopCluster(cl)
-
-neigh.df$neigh_weighted_mean[is.nan(neigh.df$neigh_weighted_mean)] <- 0
 
 model_vars.df <- 
   merge(model_vars.df, 
         neigh.df,
-        by = c("hex_id","day"))
+        by = c("hex_id","day"),
+        all.x = TRUE)
+
+model_vars.df$neigh_weighted_mean[is.na(model_vars.df$neigh_weighted_mean)] <- 0
 ```
 
-# Density
+# Population Density
 
 ```{r}
 model_vars.df$median_density_km2 <-
@@ -428,21 +829,40 @@ model_vars.df$gini_over74 <-
 model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
 ```
 
-# Causes of Death (Provincial level, 2017)
+# Road density
 
-```{r, eval =F}
-load("../cause-death-prov-2017/hex_cause_death_prov_2017.df.RData")
+```{r}
+load("../roads/primary_road_hex.df.RData")
 
-model_vars.df <- 
-  merge(model_vars.df, 
-        hex_cause_death_prov_2017.df %>%
-          dplyr::select(-PROVINCIA_2017, -ITTER107),
-        by = "hex_id",
-        all.x = T)
+model_vars.df$road_length <- 
+  primary_road_hex.df$tot_length[match(model_vars.df$hex_id,
+                                       primary_road_hex.df$hex_id)]
 
-model_vars.df$ITTER107 <- 
-  hex_cause_death_prov_2017.df$ITTER107[match(model_vars.df$hex_id,
-                                              hex_cause_death_prov_2017.df$hex_id)]
+funNeigh2 <- function(i, hex_ita_10km.nb, primary_road_hex.df) {
+  these_neigh <- 
+    hex_ita_10km.nb[[i]]
+  this_length <- 
+    sum(primary_road_hex.df$tot_length[c(i,these_neigh)])
+  return(data.frame(hex_id = i,
+                    neigh_sum_road_length = this_length))
+}
+
+hex_ita_10km.nb <- 
+  poly2nb(hex_ita_10km.sf, queen=TRUE)
+
+cl <- makeCluster(10)
+neigh.list <- 
+  parLapply(cl, hex_ita_10km.df$hex_id, funNeigh2, 
+            hex_ita_10km.nb, primary_road_hex.df)
+neigh.df <- bind_rows(neigh.list)
+stopCluster(cl)
+
+model_vars.df$neigh_sum_road_length <- 
+  neigh.df$neigh_sum_road_length[match(model_vars.df$hex_id,
+                                       neigh.df$hex_id)]
+
+model_vars.df$neigh_sum_road_length_sqrt <- 
+  sqrt(model_vars.df$neigh_sum_road_length)
 ```
 
 
@@ -605,19 +1025,19 @@ model_vars.df$perc_low_income <-
 
 ```{r}
 hex_wt_missing_value <- 
-  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_diff14)])
+  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_diff17)])
 
 hex_wt_missing_value <- 
-  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_lag4_diff14)])
+  unique(model_vars.df$hex_id[is.infinite(model_vars.df$dist_sd_lag4_diff17)])
 ```
 
 
 ```{r}
 model_vars_std.df <-
   model_vars.df %>%
-  dplyr::select(hex_id, CODREG, day, perc_pop_lockdown,
-                dist_sd_diff14, dist_sd_lag4_diff14, neigh_weighted_mean,
-                median_density_km2, gini_over74, 
+  dplyr::select(hex_id, CODREG, day, perc_pop_lockdown, dist_tot_lockdown,
+                dist_sd_diff17, dist_sd_lag4_diff17, neigh_weighted_mean,
+
                 no_conc, no2_conc, o3_conc, pm2p5_conc, pm10_conc, co_conc,  so2_conc,
                 
                 era5_temp, era5_rhum, era5_prec,
@@ -625,10 +1045,16 @@ model_vars_std.df <-
                 perc_breast_cancer, perc_colorectal_cancer, perc_lung_cancer, 
                 CHRONIC_DIAB, CHRONIC_HYP, CHRONIC_BRONC, CHRONIC_ALLER, CHRONIC_HEART,
                 smokers,
-                hotel_beds_log,
+                
                 P1, perc_female, perc_over_65, pop_over_65, perc_work_outside_comune, 
                 perc_employed, perc_unemployed, perc_degree_over_workforce,
                 perc_families_over_4, 
+                gini_over74,
+                median_density_km2, 
+                
+                hotel_beds_log,
+                road_length,
+                
                 sum_agedcare_log10, sum_construction_log10, sum_delivery_log10,
                 sum_education_log10, sum_healthcare_log10, sum_hospitality_log10,
                 sum_manufacturing.ex_meat_log10, sum_manufacturing.meat_log10,
@@ -636,40 +1062,79 @@ model_vars_std.df <-
                 sum_warehousing_log10, sum_wholesaling_log10, 
                 perc_low_income, 
                 perc_neigh5_icu_beds, case_test_ratio) %>%
-  dplyr::mutate_at(vars(dist_sd_diff14:case_test_ratio), scale)
+  dplyr::mutate_at(vars(dist_sd_diff17:case_test_ratio), scale)
 
-model_vars_std.df$day_num <- 
-  as.numeric(model_vars_std.df$day - as.Date("2020-02-24"))
-
-pooled <- 
-  lm(dist_sd_diff14 ~ 
-       dist_sd_lag4_diff14 *
-       neigh_weighted_mean *
-       perc_pop_lockdown +
-       median_density_km2 +  
-       pm2p5_conc + pm10_conc + no_conc + o3_conc + 
+pooled_pm2p5 <- 
+  lm(dist_sd_diff17 ~ 
+       dist_sd_lag4_diff17 * 
+       perc_pop_lockdown *
+       neigh_weighted_mean +
+ 
+       pm2p5_conc + no_conc + o3_conc + 
        co_conc + no2_conc + so2_conc +
        era5_temp + era5_rhum + era5_prec + 
+       
        perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
        CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER + CHRONIC_HEART +
        smokers +
-       hotel_beds_log + 
+       
+       perc_neigh5_icu_beds + case_test_ratio +
+
+       median_density_km2 + 
+       
        perc_female + perc_over_65 + gini_over74 + 
        perc_work_outside_comune +
        perc_families_over_4 + 
        perc_employed + perc_degree_over_workforce +
+       perc_low_income +
+       
        sum_agedcare_log10 + sum_construction_log10 + sum_delivery_log10 +
        sum_education_log10 + sum_healthcare_log10 + sum_hospitality_log10 +
        sum_manufacturing.ex_meat_log10 + sum_manufacturing.meat_log10 +
        sum_other_log10 + sum_retail_log10 + sum_services_log10 + sum_transport_log10 +
-       sum_warehousing_log10 + sum_wholesaling_log10 +
-       perc_low_income + 
-       perc_neigh5_icu_beds + case_test_ratio + as.factor(day_num), 
+       sum_warehousing_log10 + sum_wholesaling_log10 + 
+       
+       hotel_beds_log + 
+       road_length, 
+     data=model_vars_std.df)
+
+pooled_pm10 <- 
+  lm(dist_sd_diff17 ~ 
+       dist_sd_lag4_diff17 * 
+       perc_pop_lockdown *
+       neigh_weighted_mean +
+ 
+       pm10_conc + no_conc + o3_conc + 
+       co_conc + no2_conc + so2_conc +
+       era5_temp + era5_rhum + era5_prec + 
+       
+       perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
+       CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER + CHRONIC_HEART +
+       smokers +
+       
+       perc_neigh5_icu_beds + case_test_ratio +
+
+       median_density_km2 + 
+       
+       perc_female + perc_over_65 + gini_over74 + 
+       perc_work_outside_comune +
+       perc_families_over_4 + 
+       perc_employed + perc_degree_over_workforce +
+       perc_low_income +
+       
+       sum_agedcare_log10 + sum_construction_log10 + sum_delivery_log10 +
+       sum_education_log10 + sum_healthcare_log10 + sum_hospitality_log10 +
+       sum_manufacturing.ex_meat_log10 + sum_manufacturing.meat_log10 +
+       sum_other_log10 + sum_retail_log10 + sum_services_log10 + sum_transport_log10 +
+       sum_warehousing_log10 + sum_wholesaling_log10 + 
+       
+       hotel_beds_log + 
+       road_length, 
      data=model_vars_std.df)
 ```
 
 
-```{r fig.width=10, fig.height=13,eval=F}
+```{r fig.width=10, fig.height=13, eval=F}
 vars <- names(pooled$coefficients)
 vars <- vars[!grepl("(Intercept)|:", vars)]
 
@@ -684,9 +1149,9 @@ do.call("grid.arrange", c(plotlist, ncol=5))
 
 ```{r}
 predictor_labels <- 
-  c(dist_sd_lag4_diff14 = "past excess mortality",
-    neigh_weighted_mean = "nearby exces mortality",
-    median_density_km2 = "median density",
+  c(dist_sd_lag4_diff17 = "past excess mortality",
+    neigh_weighted_mean = "neighbouring excess mortality",
+
     pm2p5_conc = "PM2.5 conc.",
     pm10_conc = "PM10 conc.",
     no_conc = "nitrogen monoxide conc.",
@@ -708,7 +1173,10 @@ predictor_labels <-
     CHRONIC_ALLER = "perc. allergies (reg.)",
     CHRONIC_HEART = "perc. heart cond. (reg.)",
     smokers = "perc. smokers (reg.)",
-    hotel_beds_log = "log. hotel beds",
+    
+    median_density_km2 = "median density",
+    road_length = "tot. length primary roads",
+    
     perc_employed = "perc. employed",
     perc_degree_over_workforce = "perc. degree (over workforce)",
     perc_female = "perc. females", 
@@ -717,11 +1185,13 @@ predictor_labels <-
     perc_work_outside_comune = "perc. working out of comune",
     perc_families_over_4 = "perc. families over 4",
     
+    hotel_beds_log = "log. hotel beds",
+    
     sum_agedcare_log10 = "log. agedcare employees",
     sum_healthcare_log10 = "log. healthcare employees",
     sum_manufacturing.ex_meat_log10 = "log. manufactoring employees (exc. meat)",
     sum_manufacturing.meat_log10 = "log. manufactoring employees (meat only)",
-    sum_services_log10 = "log. servics employees",
+    sum_services_log10 = "log. services employees",
     sum_warehousing_log10 = "log. warehousing employees",
     sum_transport_log10 = "log. transportation employees",
     sum_delivery_log10  = "log. delivery employees",
@@ -735,70 +1205,170 @@ predictor_labels <-
     perc_low_income = "perc. low income",
     case_test_ratio = "cases vs tests ratio (reg.)",
     perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
-    `dist_sd_lag4_diff14:perc_pop_lockdown` = "past excess mortality X lockdown",
-    `neigh_weighted_mean:perc_pop_lockdown` = "near excess mortality X lockdown",
-    `dist_sd_lag4_diff14:neigh_weighted_mean` = "past excess mortality X near excess mortality",
-    `dist_sd_lag4_diff14:neigh_weighted_mean:perc_pop_lockdown` = "past excess mortality X near excess mortality X lockdown")
+    `dist_sd_lag4_diff17:perc_pop_lockdown` = "past excess mortality X perc. lockdown",
+    `perc_pop_lockdown:neigh_weighted_mean` = "neighbouring excess mortality X perc.  lockdown",
+    `dist_sd_lag4_diff17:neigh_weighted_mean` = "past excess mortality X neighbouring excess mortality",
+    `dist_sd_lag4_diff17:perc_pop_lockdown:neigh_weighted_mean` = "past excess mortality X neighbouring excess mortality X  perc. lockdown")
 ```
 
 # Multilevel 
 
 ```{r}
 library(lme4)
-multivel <- 
-  lmer(formula = dist_sd_diff14 ~ 1 +
-       dist_sd_lag4_diff14 *
-       neigh_weighted_mean *
-       perc_pop_lockdown +
-       median_density_km2 +  
-       pm2p5_conc + pm10_conc + no_conc + o3_conc +
+multilevel_pm2p5 <- 
+  lmer(formula = dist_sd_diff17 ~ 
+         dist_sd_lag4_diff17 * 
+       perc_pop_lockdown *
+       neigh_weighted_mean +
+ 
+       pm2p5_conc + no_conc + o3_conc + 
        co_conc + no2_conc + so2_conc +
-         era5_temp + era5_rhum + era5_prec + 
+       era5_temp + era5_rhum + era5_prec + 
+       
        perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
        CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER + CHRONIC_HEART +
        smokers +
-       hotel_beds_log + 
+       
+       perc_neigh5_icu_beds + case_test_ratio +
+
+       median_density_km2 + 
+       
        perc_female + perc_over_65 + gini_over74 + 
        perc_work_outside_comune +
        perc_families_over_4 + 
        perc_employed + perc_degree_over_workforce +
-       sum_agedcare_log10 + sum_healthcare_log10 + sum_manufacturing_log10 + 
-       sum_services_log10 + sum_warehousing_log10 + sum_transport_log10 + 
-       sum_delivery_log10 + perc_low_income + 
-       perc_neigh5_icu_beds + case_test_ratio + as.factor(day_num) + 
+       perc_low_income +
+       
+       sum_agedcare_log10 + sum_construction_log10 + sum_delivery_log10 +
+       sum_education_log10 + sum_healthcare_log10 + sum_hospitality_log10 +
+       sum_manufacturing.ex_meat_log10 + sum_manufacturing.meat_log10 +
+       sum_other_log10 + sum_retail_log10 + sum_services_log10 + sum_transport_log10 +
+       sum_warehousing_log10 + sum_wholesaling_log10 + 
+       
+       hotel_beds_log + 
+       road_length +
          (1|CODREG),
-           data = model_vars_std.df)
+       data = model_vars_std.df)
+
+multilevel_pm10 <- 
+  lmer(formula = dist_sd_diff17 ~ 
+         dist_sd_lag4_diff17 * 
+       perc_pop_lockdown *
+       neigh_weighted_mean +
+ 
+       pm10_conc + no_conc + o3_conc + 
+       co_conc + no2_conc + so2_conc +
+       era5_temp + era5_rhum + era5_prec + 
+       
+       perc_breast_cancer + perc_colorectal_cancer + perc_lung_cancer +
+       CHRONIC_DIAB + CHRONIC_HYP + CHRONIC_BRONC + CHRONIC_ALLER + CHRONIC_HEART +
+       smokers +
+       
+       perc_neigh5_icu_beds + case_test_ratio +
+
+       median_density_km2 + 
+       
+       perc_female + perc_over_65 + gini_over74 + 
+       perc_work_outside_comune +
+       perc_families_over_4 + 
+       perc_employed + perc_degree_over_workforce +
+       perc_low_income +
+       
+       sum_agedcare_log10 + sum_construction_log10 + sum_delivery_log10 +
+       sum_education_log10 + sum_healthcare_log10 + sum_hospitality_log10 +
+       sum_manufacturing.ex_meat_log10 + sum_manufacturing.meat_log10 +
+       sum_other_log10 + sum_retail_log10 + sum_services_log10 + sum_transport_log10 +
+       sum_warehousing_log10 + sum_wholesaling_log10 + 
+       
+       hotel_beds_log + 
+       road_length +
+         (1|CODREG),
+       data = model_vars_std.df)
+```
+
+```{r}
+coef_1 <- 
+  names(coef(pooled_pm2p5))
+coef_1.df <- 
+  data.frame(coef = coef_1)
+coef_1.df$labs <- 
+  predictor_labels[match(coef_1, names(predictor_labels))]
+
+coef_1.df$labs[coef_1.df$coef == "(Intercept)"] <- "(Intercept)"
+coef_1.df$labs[coef_1.df$coef == "perc_pop_lockdown"] <- "perc. lockdown"
+
+coef_2 <- 
+  names(coef(pooled_pm10))
+coef_2.df <- 
+  data.frame(coef = coef_2)
+coef_2.df$labs <- 
+  predictor_labels[match(coef_2, names(predictor_labels))]
+
+coef_2.df$labs[coef_2.df$coef == "(Intercept)"] <- "(Intercept)"
+coef_2.df$labs[coef_2.df$coef == "perc_pop_lockdown"] <- "perc. lockdown"
+
+stargazer(pooled_pm2p5, pooled_pm10, multilevel_pm2p5, multilevel_pm10, 
+          type = 'html', dep.var.labels = "Excess mortality (backdated by 17 days)",
+          out = '../fig/regression_table.html',
+          covariate.labels = c(coef_1.df$labs[2:5],coef_2.df$labs[5:nrow(coef_2.df)]),
+          single.row=TRUE)
 ```
 
 
 ```{r}
+pooled_pm2p5_coef.df <- 
+  as.data.frame(coef(summary(pooled_pm2p5))) %>%
+  dplyr::mutate(var = rownames(coef(summary(pooled_pm2p5))))
 
-pooled_coef.df <- 
-  as.data.frame(coef(summary(pooled))) %>%
-  dplyr::mutate(var = rownames(coef(summary(pooled))))
+multilevel_pm2p5_coef.df <- 
+  as.data.frame(coef(summary(multilevel_pm2p5))) %>%
+  dplyr::mutate(var = rownames(coef(summary(multilevel_pm2p5))))
 
-multivel_coef.df <- 
-  as.data.frame(coef(summary(multivel))) %>%
-  dplyr::mutate(var = rownames(coef(summary(multivel))))
-
-models_coef.df <- 
-  rbind(pooled_coef.df %>% 
+models_pm2p5_coef.df <- 
+  rbind(pooled_pm2p5_coef.df %>% 
           dplyr::select(Estimate, `Std. Error`, var) %>%
           dplyr::mutate(model = "pooled"), 
-        multivel_coef.df %>% 
+        multilevel_pm2p5_coef.df %>% 
           dplyr::select(Estimate, `Std. Error`, var) %>%
           dplyr::mutate(model = "multilevel"))
 
-models_coef.df$label <- 
-  predictor_labels[match(models_coef.df$var, 
+models_pm2p5_coef.df$label <- 
+  predictor_labels[match(models_pm2p5_coef.df$var, 
                          names(predictor_labels))]
 
-models_coef.df$label <- factor(models_coef.df$label, 
-                               levels = rev(predictor_labels),
-                               ordered = T)
+models_pm2p5_coef.df$label <- 
+  factor(models_pm2p5_coef.df$label, 
+         levels = rev(predictor_labels),
+         ordered = T)
 
-ggsave(filename = "estimate_entiremodel.pdf", width = 11, height = 8,
-       models_coef.df %>%
+pooled_pm10_coef.df <- 
+  as.data.frame(coef(summary(pooled_pm10))) %>%
+  dplyr::mutate(var = rownames(coef(summary(pooled_pm10))))
+
+multilevel_pm10_coef.df <- 
+  as.data.frame(coef(summary(multilevel_pm10))) %>%
+  dplyr::mutate(var = rownames(coef(summary(multilevel_pm10))))
+
+models_pm10_coef.df <- 
+  rbind(pooled_pm10_coef.df %>% 
+          dplyr::select(Estimate, `Std. Error`, var) %>%
+          dplyr::mutate(model = "pooled"), 
+        multilevel_pm10_coef.df %>% 
+          dplyr::select(Estimate, `Std. Error`, var) %>%
+          dplyr::mutate(model = "multilevel"))
+
+models_pm10_coef.df$label <- 
+  predictor_labels[match(models_pm10_coef.df$var, 
+                         names(predictor_labels))]
+
+models_pm10_coef.df$label <- 
+  factor(models_pm10_coef.df$label, 
+         levels = rev(predictor_labels),
+         ordered = T)
+
+ggsave(filename = "../fig/estimate_entiremodel.pdf", width = 10, height = 12,
+       grid.arrange(
+       models_pm2p5_coef.df %>%
          dplyr::filter(!is.na(label)) %>%
          ggplot(aes(colour = model, 
                     x=Estimate,
@@ -807,21 +1377,45 @@ ggsave(filename = "estimate_entiremodel.pdf", width = 11, height = 8,
          geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
                            xmax=Estimate+`Std. Error`)) +
          theme_bw() +
-         labs(y = NULL))
+         labs(y = NULL),
+              models_pm10_coef.df %>%
+         dplyr::filter(!is.na(label)) %>%
+         ggplot(aes(colour = model, 
+                    x=Estimate,
+                    y=label)) +
+         geom_point() +
+         geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
+                           xmax=Estimate+`Std. Error`)) +
+         theme_bw() +
+         labs(y = NULL),
+       ncol = 1))
 
-ggsave(filename = "estimate_selectedvars.pdf", width = 11, height = 8,
-models_coef.df %>%
-  dplyr::filter(!is.na(label) &
-                  !grepl("dist_sd_lag4_diff14|neigh_weighted_mean|perc_pop_lockdown", var)) %>%
-  ggplot(aes(colour = model, 
-             x=Estimate,
-             y=label)) +
-  geom_point() +
-  geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
-                    xmax=Estimate+`Std. Error`)) +
-  theme_bw() +
-  labs(y = NULL, caption = "Interaction 'past excess mortality X near excess mortality X lockdown' not visualised"))
-
+ggsave(filename = "../fig/estimate_selectedvars.pdf", width = 10, height = 12,
+       grid.arrange(
+         models_pm2p5_coef.df %>%
+           dplyr::filter(!is.na(label) &
+                           !grepl("dist_sd_lag4_diff17|neigh_weighted_mean|perc_pop_lockdown", var)) %>%
+           ggplot(aes(colour = model, 
+                      x=Estimate,
+                      y=label)) +
+           geom_point() +
+           geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
+                             xmax=Estimate+`Std. Error`)) +
+           theme_bw() +
+           labs(y = NULL),
+         models_pm10_coef.df %>%
+           dplyr::filter(!is.na(label) &
+                           !grepl("dist_sd_lag4_diff17|neigh_weighted_mean|perc_pop_lockdown", var)) %>%
+           ggplot(aes(colour = model, 
+                      x=Estimate,
+                      y=label)) +
+           geom_point() +
+           geom_errorbar(aes(xmin=Estimate-`Std. Error`, 
+                             xmax=Estimate+`Std. Error`)) +
+           theme_bw() +
+           labs(y = NULL),
+         ncol = 1
+       ))
 ```
 
 

@@ -15,7 +15,7 @@ library(ggplot2)
 library(knitr)
 
 raw_dat.df <- 
-  read_csv("istat-4-june-2020/comuni_giornaliero-decessi.csv.zip", 
+  read_csv("istat-9-july-2020/comuni_giornaliero-decessi.csv.zip", 
            locale = locale(encoding = "ISO-8859-1"))
 
 length(unique(raw_dat.df$COD_PROVCOM))
@@ -24,7 +24,7 @@ to_include <- unique(raw_dat.df$COD_PROVCOM[raw_dat.df$T_20 != "n.d."])
 length(to_include)
 
 all_days <- unique(raw_dat.df$GE)
-all_days <- all_days[grepl("^01|^02|^03|^04", all_days)]
+all_days <- all_days[grepl("^01|^02|^03|^04|^05", all_days)]
 all_days <- all_days[order(all_days)]
 
 m <- 
@@ -67,10 +67,10 @@ save(dat_over65.dt, file = "dat_over65.dt.RData")
 library(sf)
 
 load("../grid/hex_ita_10km.sf.RData")
-st_crs(hex_ita_1km.sf) <- st_crs(32632)
+st_crs(hex_ita_10km.sf) <- st_crs(32632)
 
 # hex_ita_1km_union.sf <- 
-#   st_union(hex_ita_1km.sf %>% dplyr::filter(!is.na(CODREG)))
+#   st_union(hex_ita_10km.sf %>% dplyr::filter(!is.na(CODREG)))
 
 italy.sf <- 
   read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_clipped_to_hex.shp") %>% 
@@ -82,11 +82,20 @@ ggplot(italy.sf) +
   scale_fill_grey() + theme_bw() + labs(fill = "Data available")
 
 raw_dat.df %>%
+  dplyr::summarize(`pop. covered %` = sum(M_19[CL_ETA >= 15 & 
+                       COD_PROVCOM %in% to_include]  / 
+                  sum(M_19[CL_ETA >= 15]))) %>%
+  kable()
+
+raw_dat.df %>%
   dplyr::group_by(NOME_REGIONE) %>%
   dplyr::summarize(`pop. covered %` = sum(M_19[CL_ETA >= 15 & 
                        COD_PROVCOM %in% to_include]  / 
                   sum(M_19[CL_ETA >= 15]))) %>%
   kable()
+
+sum(to_include %in% italy.sf$PRO_COM_T[italy.sf$COD_REG == 3]) / 
+  sum(italy.sf$COD_REG == 3)
   
 # italy.sf <-
 #   italy.sf %>%
@@ -116,7 +125,7 @@ fun1 <- function(day) {
 these.sf <- lapply(all_days, fun1)
 names(these.sf) <- all_days
 
-fun2 <- function(i, these.sf, hex_ita_1km.sf) {
+fun2 <- function(i, these.sf, hex_ita_10km.sf) {
   this.sf <- these.sf[[i]]
   require(sf)
   hex_dead.df <- data.frame()
@@ -129,7 +138,7 @@ fun2 <- function(i, these.sf, hex_ita_1km.sf) {
       this_sample.sf <- 
         st_sample(this_sampling.sf, this_sampling.sf[[year]])
       this_res <- 
-        as.data.frame(table(unlist(st_within(this_sample.sf, hex_ita_1km.sf))))
+        as.data.frame(table(unlist(st_within(this_sample.sf, hex_ita_10km.sf))))
       
       this_res$year <- year
       this_res$day <- names(these.sf)[[i]]
@@ -140,7 +149,7 @@ fun2 <- function(i, these.sf, hex_ita_1km.sf) {
 
 cl <- makeCluster(10)
 
-hex_dead.list <- parLapply(cl, 1:length(all_days), fun2, these.sf, hex_ita_1km.sf)
+hex_dead.list <- parLapply(cl, 1:length(all_days), fun2, these.sf, hex_ita_10km.sf)
 
 stopCluster(cl)
 
@@ -152,7 +161,7 @@ save(hex_dead.df, file = "hex_dead.df.RData")
 ```{r, fig.width = 9, fig.height=13}
 
 plotFun <- function(day) {
-  this.sf <- hex_ita_1km.sf
+  this.sf <- hex_ita_10km.sf
   this.sf$value <-
     hex_dead.df[hex_dead.df$day == day,]$Freq[match(this.sf$hex_id,
                                                     hex_dead.df[hex_dead.df$day == day,]$hex_id)]
@@ -175,168 +184,3 @@ plots <- lapply(c("0101", "0115", "0131",
 do.call("grid.arrange", c(plots, ncol=3))
 
 ```
-
-
-```{r, eval = F, include=F}
-# sd(c(10, 11, 11, 10, 9))
-# 
-# 22 - mean(c(10, 11, 11, 10, 9)) / 
-#   sd(c(10, 11, 11, 10, 9))
-
-dat_over65_diff.dt <-
-  dat_over65.dt %>%
-  dplyr::select(-value) %>%
-  # dplyr::filter(COD_PROVCOM == "016024") %>%
-  tidyr::pivot_wider(names_from = year, values_from = value_ma14)
-
-dat_over65_diff.dt$sd_15_19 <- 
-  apply(dat_over65_diff.dt[,3:7], 1, FUN = sd)
-dat_over65_diff.dt$mean_15_19 <- 
-  apply(dat_over65_diff.dt[,3:7], 1, FUN = mean)
-dat_over65_diff.dt$dist_sd <- 
-  (dat_over65_diff.dt$T_20 - 
-     dat_over65_diff.dt$mean_15_19) /
-  dat_over65_diff.dt$sd_15_19
-
-```
-
-# Estimate infection size based on infection fatality rate
-
-Source: Verity, R., Okell, L. C., Dorigatti, I., Winskill, P., Whittaker, C., Imai, N., Cuomo-Dannenburg, G., Thompson, H., Walker, P. G. T., Fu, H., Dighe, A., Griffin, J. T., Baguelin, M., Bhatia, S., Boonyasiri, A., Cori, A., Cucunubá, Z., FitzJohn, R., Gaythorpe, K., … Ferguson, N. M. (2020). Estimates of the severity of coronavirus disease 2019: A model-based analysis. The Lancet Infectious Diseases, S1473309920302437. https://doi.org/10.1016/S1473-3099(20)30243-7
-
-```{r}
-lancet_2020_ifr_estimate <-
-  read.csv("lancet-2020-ifr-estimate/lancet_2020_ifr_estimate.csv")
-
-lancet_2020_ifr_estimate$age_lancet <- 
-  as.factor(1:9)
-
-```
-
-```{r, eval = FALSE}
-
-raw_dat.df <- 
-  read_csv("istat-4-may-2020/comuni_giornaliero.csv.zip", 
-           locale = locale(encoding = "ISO-8859-1"))
-
-length(unique(raw_dat.df$COD_PROVCOM))
-
-comuni_complete <- unique(raw_dat.df$COD_PROVCOM[raw_dat.df$T_20 != "n.d."])
-length(comuni_complete)
-
-raw_dat.df %>%
-  dplyr::group_by(complete = COD_PROVCOM %in% comuni_complete) %>%
-  dplyr::summarise(T_15 = sum(T_15))
-
-all_days <- unique(raw_dat.df$GE)
-all_days <- all_days[!grepl("^04", all_days)]
-
-m <-
-  expand.grid(to_include,
-              all_days,
-              paste0("T_", 15:20),
-              unique(raw_dat.df$CL_ETA))
-colnames(m) <- c("COD_PROVCOM","GE", "year", "CL_ETA")
-dt <- data.table(m, key=colnames(m))
-
-dat.dt <- 
-  raw_dat.df %>%
-  # dplyr::filter(COD_PROVCOM %in% to_include) %>%
-  dplyr::select(COD_PROVCOM, CL_ETA, GE, T_15:T_20) %>% # TOTAL ONLY
-  tidyr::gather(year, value, T_15:T_20) %>%
-  data.table(key=colnames(m))
-
-dat.dt <-
-  merge(dat.dt, dt, all = T)
-dat.dt$value[is.na(dat.dt$value)] <- "0"
-
-new_levels <- 
-  list(`0` = 1, `1` = 1, `2` = 1, 
-    `3` = 2, `4` = 2, 
-    `5` = 3, `6` = 3, 
-    `7` = 4, `8` = 4, 
-    `9` = 5, `10` = 5, 
-    `11` = 6, `12` = 6, 
-    `13` = 7, `14` = 7, 
-    `15` = 8, `16` = 8, 
-    `17` = 9, `18` = 9, `19` = 9, `20` = 9, `21` = 9)
-
-dat.dt$age_lancet <- 
-  unlist(new_levels)[match(dat.dt$CL_ETA, 
-                           as.numeric(names(new_levels)))]
-
-dat.dt$year <- as.numeric(gsub("T_", "20", as.character(dat.dt$year)))
-
-dat.dt <- 
-  dat.dt %>% 
-  dplyr::mutate(value = as.numeric(value),
-                date = as.Date(paste0(year,GE), 
-                               format("M_%y%m%d"))) %>%
-  dplyr::group_by(COD_PROVCOM, GE, year, age_lancet) %>%
-  dplyr::summarise(value = sum(value))
-
-dat_spread.dt <- 
-  dat.dt %>%
-  tidyr::pivot_wider(names_from = year, values_from = value) %>%
-  data.table()
-
-dat_spread.dt$GE <- 
-  as.character(dat_spread.dt$GE)
-dat_spread.dt$COD_PROVCOM <-
-  as.character(dat_spread.dt$COD_PROVCOM)
-
-day_age.df <-
-  expand.grid(all_days,
-              1:9)
-day_age.df$Var1 <- as.character(day_age.df$Var1)
-day_age.df$Var2 <- as.character(day_age.df$Var2)
-
-fun1 <- function(i, day_age.df, italy.sf) {
-  require(sf)
-  require(data.table)
-  this.dt <- 
-    dat_spread.dt[GE == day_age.df$Var1[i] &
-                  age_lancet == day_age.df$Var2[i]]
-  this.sf <- 
-    merge(italy.sf, this.dt, 
-          by.x = "PRO_COM_T", by.y = "COD_PROVCOM")
-  return(this.sf)
-}
-
-these.sf <- lapply(all_days, fun1)
-names(these.sf) <- all_days
-
-fun2 <- function(i, these.sf, hex_ita_1km.sf) {
-  this.sf <- these.sf[[i]]
-  require(sf)
-  hex_dead.df <- data.frame()
-  for (year in c(paste0("T_", 15:20))) {
-      this_sampling.sf <- 
-        this.sf[this.sf[[year]]>0,]
-      if (nrow(this_sampling.sf) == 0) {
-        next
-      }
-      this_sample.sf <- 
-        st_sample(this_sampling.sf, this_sampling.sf[[year]])
-      this_res <- 
-        as.data.frame(table(unlist(st_within(this_sample.sf, hex_ita_1km.sf))))
-      
-      this_res$year <- year
-      this_res$day <- names(these.sf)[[i]]
-      hex_dead.df <- rbind(hex_dead.df, this_res)
-  }
-  return(hex_dead.df)
-}
-
-cl <- makeCluster(10)
-
-hex_dead.list <- parLapply(cl, 1:length(all_days), fun2, these.sf, hex_ita_1km.sf)
-
-stopCluster(cl)
-
-hex_dead.df <- bind_rows(hex_dead.list)
-colnames(hex_dead.df)[1] <- "hex_id"
-save(hex_dead.df, file = "hex_dead.df.RData")
-
-```
-

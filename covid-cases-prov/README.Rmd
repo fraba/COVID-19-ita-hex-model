@@ -32,6 +32,13 @@ dat.df <-
   dplyr::group_by(data, codice_regione, denominazione_regione) %>%
   dplyr::summarise_at(vars(ricoverati_con_sintomi:casi_testati), sum)
 
+dat.df %>% 
+  group_by(date = as.Date(data, format = "%Y-%m-%dT%H:%M:%S")) %>%
+  summarize(cases = sum(nuovi_positivi)) %>%
+ggplot(aes(x = date, y = cases)) +
+  geom_line() +
+  theme_bw()
+
 reg.sf <- 
   sf::read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
 
