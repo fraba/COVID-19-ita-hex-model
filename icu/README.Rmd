@@ -143,6 +143,15 @@ ggplot(hex_ita_10km.sf) +
   geom_sf(aes(fill = icu_beds), colour = NA)
 
 save(hex_icu_beds.df, file = "hex_icu_beds.df.RData")
+
+ggsave(filename = "../fig/icu_beds.pdf",
+       ggplot(dat_icu_beds.sf) +
+         geom_sf(aes(size = `Totale posti letto`), alpha = 0.9, colour = "red") +
+         theme_bw() +
+         theme(axis.text = element_blank(),
+               axis.ticks = element_blank()) +
+         labs(size = "ICU beds"))
+
 ```
 
 

@@ -1,0 +1,238 @@
+---
+title: "Communiting network"
+author: "Francesco Bailo"
+date: "30/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(readr)
+library(parallel)
+
+load("../grid/hex_ita_10km.sf.RData")
+
+dat <- 
+  read_table("../comm-matrix/MATRICE PENDOLARISMO 2011/matrix_pendo2011_10112014.txt",
+             col_names = FALSE) %>%
+  dplyr::filter(X1=="S") %>%
+  dplyr::mutate(from = paste0(X3, X4),
+                to = paste0(X8, X9),
+                n = as.numeric(X15)) %>%
+  dplyr::filter(to != "000000")  %>%
+  dplyr::select(from, to, n)
+
+
+sez2011_centroids.df <- 
+  read.csv("../census_2011/census_lonlat_sez_2011.csv")
+sez2011_centroids.sf <-
+  st_as_sf(sez2011_centroids.df, coords = c("lon", "lat"), crs = 4326)
+
+res_sez_2011 <- 
+  st_intersects(
+    sez2011_centroids.sf %>% 
+      st_transform(32632), 
+    hex_ita_10km.sf)
+is.na(res_sez_2011) <- 
+  lengths(res_sez_2011) == 0
+
+sez2011_centroids.sf$hex_id <- 
+  unlist(res_sez_2011)
+
+sez2011_population.df <- 
+  read_csv("../census_2011/census_population_sez_2011.csv.zip")
+
+sez2011_population.df$hex_id <- 
+  sez2011_centroids.sf$hex_id[match(sez2011_population.df$sez2011,
+                                    sez2011_centroids.sf$sez2011)]
+
+hex_PRO_COM_T_pop <- 
+  sez2011_population.df %>%
+  dplyr::mutate(PRO_COM_T = 
+                  sprintf("%06d", pro_com),
+                 pop = 
+                  P17 + P18 + P19 + P20 + P21  + P22 + P23 + P24 + P25 + P26) %>%
+  dplyr::select(hex_id, PRO_COM_T, pop) %>%
+  dplyr::group_by(hex_id, PRO_COM_T) %>%
+  dplyr::summarize(pop = sum(pop)) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(PRO_COM_T) %>%
+  dplyr::mutate(prop = pop / sum(pop))
+
+hex_PRO_COM_T_pop.el <- 
+  merge(hex_PRO_COM_T_pop, dat, 
+        by.x = "PRO_COM_T", by.y = "from")
+
+hex_PRO_COM_T_pop.el <- 
+  merge(hex_PRO_COM_T_pop.el, hex_PRO_COM_T_pop,
+        by.x = "to", by.y = "PRO_COM_T")
+
+hex_PRO_COM_T_pop.el$n.weighted <-
+  hex_PRO_COM_T_pop.el$n * hex_PRO_COM_T_pop.el$prop.x * hex_PRO_COM_T_pop.el$prop.y
+
+hex_commuting_net.el <- 
+  hex_PRO_COM_T_pop.el %>%
+  dplyr::group_by(hex_id.x, hex_id.y) %>%
+  dplyr::summarize(n = sum(n.weighted))
+
+require(igraph)
+hex_commuting_net.g <- 
+  graph_from_data_frame(hex_commuting_net.el,
+                        directed = F)
+ecount(hex_commuting_net.g)
+805400
+
+hex_commuting_net.g <- 
+  igraph::simplify(hex_commuting_net.g,
+                   remove.multiple = TRUE,
+                   edge.attr.comb = list(n="sum"))
+ecount(hex_commuting_net.g)
+537014
+
+hex_commuting_net.g <- 
+  hex_commuting_net.g %>% 
+  delete_edges(E(hex_commuting_net.g)[E(hex_commuting_net.g)$n == 0])
+ecount(hex_commuting_net.g)
+535080
+
+hex_commuting_net.g <- 
+  hex_commuting_net.g %>%
+  delete_vertices(V(hex_commuting_net.g)[degree(hex_commuting_net.g) == 0])
+
+save(hex_commuting_net.g, 
+     file = "../comm-matrix/hex_commuting_net.g.RData")
+
+hex_commuting_net.el <- 
+  as.data.frame(as_edgelist(hex_commuting_net.g, names = TRUE))
+
+hex_ita_10km_centroid.df <-
+  as.data.frame(st_coordinates(st_centroid(hex_ita_10km.sf) %>% st_transform(4326)))
+
+hex_ita_10km_centroid.df$hex_id <-
+  hex_ita_10km.sf$hex_id
+
+hex_commuting_net.el$lon.x <- 
+  hex_ita_10km_centroid.df$X[match(hex_commuting_net.el$V1,
+                                   hex_ita_10km_centroid.df$hex_id)]
+hex_commuting_net.el$lon.y <- 
+  hex_ita_10km_centroid.df$X[match(hex_commuting_net.el$V2,
+                                   hex_ita_10km_centroid.df$hex_id)]
+
+hex_commuting_net.el$lat.x <- 
+  hex_ita_10km_centroid.df$Y[match(hex_commuting_net.el$V1,
+                                   hex_ita_10km_centroid.df$hex_id)]
+hex_commuting_net.el$lat.y <- 
+  hex_ita_10km_centroid.df$Y[match(hex_commuting_net.el$V2,
+                                   hex_ita_10km_centroid.df$hex_id)]
+
+hex_commuting_net.el$n <- 
+  E(hex_commuting_net.g)$n
+
+
+hex_ita_10km.sf %>%
+  dplyr::mutate(missing = 
+                  !hex_id %in%
+                  V(hex_commuting_net.g)$name |
+                  hex_id %in% 
+                  V(hex_commuting_net.g)$name[degree(hex_commuting_net.g)==0]) %>%
+  ggplot() + geom_sf(aes(fill = missing), colour = NA)
+
+V(hex_commuting_net.g)$degree <- 
+  degree(hex_commuting_net.g)
+
+hex_commuting_net_over100.g <- 
+  hex_commuting_net.g %>% 
+  delete_vertices(V(hex_commuting_net.g)[degree(hex_commuting_net.g)<100])
+
+communities <- 
+  cluster_fast_greedy(hex_commuting_net.g,
+                      weights = E(hex_commuting_net.g)$n)
+
+hex_ita_10km_centroid.df$community <-
+  communities$membership[match(hex_ita_10km_centroid.df$hex_id,
+                               communities$names)]
+
+top20_communities <- 
+  hex_ita_10km_centroid.df %>%
+  dplyr::group_by(community) %>%
+  dplyr::count() %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(!is.na(community)) %>%
+  dplyr::top_n(20)
+
+
+library(RColorBrewer)
+qual_col_pals <-
+  brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector <- 
+  unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+
+
+ggsave(filename="../fig/hex_commuters_network.pdf",
+       ggplot() +
+         geom_curve(data = 
+                      hex_commuting_net.el %>%
+                      dplyr::filter(n > 100),
+                    aes(x = lon.x, y = lat.x, xend = lon.y, yend = lat.y,
+                        size = n),
+                    alpha = .5, curvature = -0.1) +
+         scale_size(range=c(0.05, .9)) +
+         geom_sf(data = ita_reg.sf %>% st_transform(4326), fill = NA) +
+         theme_bw() +
+         guides(size = FALSE) +
+         labs(x=NULL, y=NULL))
+
+
+ggsave(filename="../fig/hex_commuters_network_north.pdf",
+       ggplot() +
+         geom_point(data = 
+                      hex_ita_10km_centroid.df %>%
+                      dplyr::filter(!is.na(community)),
+                    aes(x=X, y=Y, colour = as.factor(community)), 
+                    size = 5, alpha = .5) +
+         scale_colour_manual(values = c(brewer.pal(8, name = "Set2"),
+                                        brewer.pal(12, name = "Set3"),
+                                        brewer.pal(9, name = "Set1"))) +
+         # geom_encircle(data = 
+         #              hex_ita_10km_centroid.df %>%
+         #              dplyr::filter(!is.na(community)),
+         #              aes(x=X, y=Y, group = as.factor(community))) +
+         geom_curve(data = 
+                      hex_commuting_net.el %>%
+                      dplyr::filter(n > 100),
+                    aes(x = lon.x, y = lat.x, xend = lon.y, yend = lat.y,
+                        size = n),
+                    alpha = .5, curvature = -0.1) +
+         scale_size(range=c(0.05, .9)) +
+         geom_sf(data = ita_reg.sf %>% st_transform(4326), fill = NA) +
+         geom_point(data = early_hotspots_centroid.df,
+                    aes(x=X,y=Y)) +
+         geom_label_repel(data = early_hotspots_centroid.df[1,],
+                          aes(x=X,y=Y,label=label),
+                          nudge_y = 10, 
+                          segment.size = .1) +
+         geom_label_repel(data = early_hotspots_centroid.df[2,],
+                          aes(x=X,y=Y,label=label),
+                          nudge_x = 10,
+                          nudge_y = 1,
+                          segment.size = .1) +
+         geom_point(data = lockdown_23feb_centroid.df,
+                    aes(x=X,y=Y)) +
+         geom_label_repel(data = lockdown_23feb_centroid.df[1,],
+                          aes(x=X,y=Y,label=label),
+                          nudge_x = - 10,
+                          nudge_y = 10, 
+                          segment.size = .1) +
+         geom_label_repel(data = lockdown_23feb_centroid.df[2,],
+                          aes(x=X,y=Y,label=label),
+                          nudge_x = + 10,
+                          nudge_y = 10, 
+                          segment.size = .1) +
+         coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+         theme_bw() +
+         guides(colour = FALSE, size = FALSE, group = FALSE) +
+         labs(x=NULL, y=NULL))
+  
+
+
+```

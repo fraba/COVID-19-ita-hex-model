@@ -1,15 +1,19 @@
 ---
-title: "Supplemental material"
-output: html_document
+title: "Supplemental material v1"
+date: August 10, 2020
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    toc_depth: 2
 ---
 
-Key columns: 
-* `hex_id`: integer
-* `day`: Date
-* `CODREG`: numeric
+\newpage
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, cache = TRUE, include=FALSE)
+Supplemental material to the paper *The security implications of COVID-19 in times of recurrent respiratory viruses: environmental, social, and medical risk factors*
+
+```{r setup, include=FALSE, cache = F}
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE, include=FALSE, message=F, warning=F)
 
 library(sf)
 library(ggplot2)
@@ -33,9 +37,12 @@ library(ggrepel)
 library(gridExtra)
 library(cowplot)
 library(igraph)
+library(RColorBrewer)
+library(igraph)
+library(readr)
 ```
 
-```{r}
+```{r load, cache = F}
 load("../grid/hex_ita_10km.sf.RData")
 load("../air_quality/airquality.df.RData")
 load("../air_quality/era5_climate_hex.df.RData")
@@ -44,6 +51,89 @@ load("../covid-cases-prov/reg_testing.df.RData")
 load("../locked-down-comune/hex_pop_lockdown.RData")
 load("../pop_density/pop_densities.df.RData")
 load("../roads/ita_osm_roads.sf.RData")
+load("../census_2011/census_polygons.sf.RData")
+load("../comm-matrix/hex_commuting_net.g.RData")
+load("../roads/primary_road_hex.df.RData")
+load("../hotel-comune/hex_beds.df.RData")
+load("../icu/hex_icu_beds.df.RData")
+load("../income/hex_income.df.RData")
+
+italy_comune.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_clipped_to_hex.shp")
+ita_reg.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+region.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+province.sf <- 
+  read_sf("../shapefile/Italy/Limiti01012020/ProvCM01012020/ProvCM01012020_WGS84.shp")
+
+raw_dead_dat.df <- 
+  read_csv("../dead/istat-9-july-2020/comuni_giornaliero-decessi.csv.zip", 
+           locale = locale(encoding = "ISO-8859-1"))
+```
+
+```{r}
+predictor_labels <- 
+  c(dist_sd_lag4_diff17 = "past excess mortality",
+    neigh_weighted_mean = "neighbouring excess mortality",
+
+    pm2p5_conc = "PM2.5 conc.",
+    pm10_conc = "PM10 conc.",
+    no_conc = "nitrogen monoxide conc.",
+    o3_conc = "ozone conc.",
+    co_conc = "carbon monoxide conc.",
+    no2_conc = "nitrogen dioxide conc.",
+    so2_conc = "sulphur dioxide",
+    
+    era5_temp = "temperature", 
+    era5_rhum = "relative humidity", 
+    era5_prec = "precipitation",
+    
+    perc_breast_cancer = "perc. breast cancer incidence (reg.)",
+    perc_colorectal_cancer = "perc. colorectal cancer incidence (reg.)",
+    perc_lung_cancer = "perc. lung cancer incidence (reg.)",
+    CHRONIC_DIAB = "perc. diabetes (reg.)",
+    CHRONIC_HYP  = "perc. hypertension (reg.)", 
+    CHRONIC_BRONC = "perc. bronchitis (reg.)", 
+    CHRONIC_ALLER = "perc. allergies (reg.)",
+    CHRONIC_HEART = "perc. heart cond. (reg.)",
+    smokers = "perc. smokers (reg.)",
+    
+    median_density_km2 = "median density",
+    road_length = "tot. length primary roads",
+    
+    perc_employed = "perc. employed",
+    perc_degree_over_workforce = "perc. degree (over workforce)",
+    perc_female = "perc. females", 
+    perc_over_65 = "perc. over 65",
+    gini_over74 = "over 74 conc.",
+    perc_work_outside_comune = "perc. working out of comune",
+    perc_families_over_4 = "perc. families over 4",
+    
+    hotel_beds_log = "log. hotel beds",
+    
+    sum_agedcare_log10 = "log. agedcare employees",
+    sum_healthcare_log10 = "log. healthcare employees",
+    sum_manufacturing.ex_meat_log10 = "log. manufacturing employees (exc. meat)",
+    sum_manufacturing.meat_log10 = "log. manufacturing employees (meat only)",
+    sum_services_log10 = "log. services employees",
+    sum_warehousing_log10 = "log. warehousing employees",
+    sum_transport_log10 = "log. transportation employees",
+    sum_delivery_log10  = "log. delivery employees",
+    sum_construction_log10 = "log. construction employees",
+    sum_education_log10 = "log. education employees",
+    sum_hospitality_log10 = "log. hospitality employees",
+    sum_retail_log10 = "log. retail employees",
+    sum_wholesaling_log10 = "log. wholesaling employees",
+    sum_other_log10 = "log. other employees",
+    
+    perc_low_income = "perc. low income",
+    case_test_ratio = "cases vs tests ratio (reg.)",
+    perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
+    `dist_sd_lag4_diff17:perc_pop_lockdown` = "past excess mort. X perc. lockdown",
+    `perc_pop_lockdown:neigh_weighted_mean` = "neighb. excess mort. X perc.  lockdown",
+    `dist_sd_lag4_diff17:neigh_weighted_mean` = "past excess mort. X neighb. excess mort.",
+    `dist_sd_lag4_diff17:perc_pop_lockdown:neigh_weighted_mean` = "past excess mort. X neighb. excess mort. X  perc. lockdown")
 ```
 
 ```{r}
@@ -55,6 +145,9 @@ hex_ita_10km.sf$CODREG[hex_ita_10km.sf$REGIONE == "Liguria"] <- '7'
 ```
 
 # Hexagonal Grid
+
+An hexagonal grid is randomly created to cover the entire Italian territory. Each grid is set to have a size (diameter) of 10-km. Variables associated to each cell are used as the unit of analysis for the regression models. The adoption of a grid of hexagonal cell is justified by the necessity of mapping statistics reported for geographies with significantly different shape and area.
+
 
 ```{r}
 ggsave(file = "../fig/hex_grid.pdf", width = 8, height = 10,
@@ -68,37 +161,297 @@ ggsave(file = "../fig/hex_grid.pdf", width = 8, height = 10,
               x = NULL, y = NULL))
 ```
 
+The following figure shows the grid of `r nrow(hex_ita_10km.sf %>% filter(!is.na(P1)))` hexagonal cell used in the analysis. Notably, `r nrow(hex_ita_10km.sf %>% filter(is.na(P1)))`  cells have been dropped since based on the 2011 census are not inhabitated. 
+
+![](../fig/hex_grid.pdf)
+
+## Interesection between census sections and hexagonal cells for count variables
+
+```{r eval = T}
+
+my_bbox <- 
+  c('xmin' = 8.464479, 'ymin' = 45.475532, 'xmax' = 8.618974, 'ymax' = 45.548670)
+
+my_bbox.m <- 
+  matrix(c(my_bbox['xmin'], my_bbox['xmin'], 
+           my_bbox['xmax'], my_bbox['xmax'],
+           my_bbox['xmin'], my_bbox['ymax'], 
+           my_bbox['ymin'], my_bbox['ymin'],
+           my_bbox['ymax'], my_bbox['ymax']),
+         ncol = 2)
+
+my_bbox.sf <- 
+  st_geometry(st_polygon(x = list(my_bbox.m)))
+
+st_crs(my_bbox.sf) <- 4326
+
+my_bbox_buff_1000.sf <- 
+  my_bbox.sf %>%
+  st_transform(crs = 32632) %>%
+  st_buffer(dist = 1000) %>% # 1 kilometers
+  st_transform(crs = 4326)
+
+my_bbox_buff_2500.sf <- 
+  my_bbox.sf %>%
+  st_transform(crs = 32632) %>%
+  st_buffer(dist = 2500) %>% # 2.5 kilometers
+  st_transform(crs = 4326)
+
+my_bbox_buff_12000.sf <- 
+  my_bbox.sf %>%
+  st_transform(crs = 32632) %>%
+  st_buffer(dist = 12000) %>% # 12 kilometers
+  st_transform(crs = 4326)
+
+hex_ita_10km_smpl.sf <- 
+  hex_ita_10km.sf %>% 
+  dplyr::filter(hex_id %in%
+                  st_intersection(hex_ita_10km.sf, 
+                                  st_transform(my_bbox_buff_2500.sf, 32632))$hex_id)
+
+census_polygons_smpl.sf <-
+  census_polygons.sf %>%
+  dplyr::filter(sez2011 %in% st_intersection(census_polygons.sf %>% st_make_valid(), 
+                                             st_transform(hex_ita_10km_smpl.sf,
+                                                          32632))$sez2011)
+
+census_centroids_smpl.sf <-
+  census_polygons_smpl.sf %>% st_centroid()
+
+
+census_centroids_smpl.sf <- 
+  st_intersection(census_centroids_smpl.sf, 
+                  hex_ita_10km_smpl.sf)
+
+ggsave(filename = "../fig/census_to_hex_grid.pdf",  width = 12,
+       grid.arrange(
+         ggplot() +
+           geom_sf(data = hex_ita_10km_smpl.sf %>% 
+                     st_transform(4326), fill = NA) +
+           geom_sf(data = census_polygons_smpl.sf %>% 
+                     st_transform(4326), fill = NA, colour = 'gray', size = .2) + 
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_2500.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_2500.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['ymax'])) +
+           labs(title = "1."),
+         ggplot() +
+           geom_sf(data = hex_ita_10km_smpl.sf %>%
+                     st_transform(4326), fill = NA) +
+           geom_sf(data = census_polygons_smpl.sf %>% 
+                     st_transform(4326), fill = NA, colour = 'gray', size = .2) + 
+           geom_sf(data = census_centroids_smpl.sf %>% 
+                     st_transform(4326), size = .2) + 
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_2500.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_2500.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['ymax'])) +
+           labs(title = "2."),
+         
+         ggplot() +
+           geom_sf(data = hex_ita_10km_smpl.sf %>% 
+                     st_transform(4326), fill = NA) +
+           geom_sf(data = census_centroids_smpl.sf %>% 
+                     st_transform(4326), size = .6, aes(colour = as.factor(hex_id))) +
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_2500.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_2500.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['ymax'])) +
+           guides(colour = FALSE) +
+           labs(title = "3."),
+         ncol = 3))
+```
+
+To map census count variables measured at the level of census sections with hexagonal cells, we proceeded as following:
+
+1. we computed the centroid, or its geographic centre, of the `r format(nrow(census_polygons.sf), big.mark=",")` census sections;
+2. we intersected centroids and hexagonal cells;
+3. for each haxagonal cell, we summed the count variables pertaining to the census sections with a centroid contained within the cell.
+
+![](../fig/census_to_hex_grid.pdf)
+
+## Interesection between comune and hexagonal cells for count variables
+
+To map *comune* count variables onto hexagon cells, we proceeded as following: 
+
+1. we clipped unpopulated areas corresponding to the unpopulated hexagon cells identified before from the *comune*;
+2. we randomly sampled a number of points within the remaining (populated) area of the *comune* corresponding to the reported count;
+3. we counted how many points resulted within each hexagonal cell. 
+
+
+```{r eval = F}
+
+italy_comune_smpl.sf <-
+  italy_comune.sf %>%
+  dplyr::filter(PRO_COM_T %in% st_intersection(italy_comune.sf %>% st_make_valid(), 
+                                               st_transform(hex_ita_10km_smpl.sf,
+                                                            32632))$PRO_COM_T)
+italy_comune_pnt_smpl.sf <- 
+  st_sample(italy_comune_smpl.sf, sample(10:20, nrow(italy_comune_smpl.sf), replace = T))
+
+italy_comune_pnt_smpl.sf <- 
+  st_as_sf(as.data.frame(st_coordinates(italy_comune_pnt_smpl.sf)), 
+           coords = c("X", "Y"), crs = 32632)
+
+italy_comune_pnt_PRO_COM_T_smpl.sf <- 
+  st_intersection(italy_comune_pnt_smpl.sf, 
+                  italy_comune_smpl.sf)
+
+italy_comune_pnt_hex_smpl.sf <- 
+  st_intersection(italy_comune_pnt_smpl.sf, 
+                  hex_ita_10km.sf)
+
+ggsave(filename = "../fig/comune_to_hex_grid.png", width = 10, height = 4,
+       grid.arrange(
+         ggplot() +
+           geom_sf(data = italy_comune.sf %>% 
+                     st_transform(4326), fill = NA, colour = 'black', size = .2) +
+           geom_sf(data = hex_ita_10km.sf %>% filter(is.na(P1)), fill = "red", 
+                   alpha = .5, colour = 'red') +
+           coord_sf(xlim = c(8.51475, 11.31198), 
+                    ylim = c(44.69240, 46.58386)) +
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           labs(title = "1."),
+         ggplot() +
+           geom_sf(data = hex_ita_10km_smpl.sf %>% 
+                     st_transform(4326), fill = NA) +
+           geom_sf(data = italy_comune_smpl.sf %>% 
+                     st_transform(4326), fill = NA, colour = 'gray', size = .2) +
+           geom_sf(data = st_intersection(italy_comune_pnt_PRO_COM_T_smpl.sf %>%
+                                            st_transform(4326),
+                                          my_bbox_buff_2500.sf),
+                   size = 2, aes(colour = as.factor(PRO_COM_T))) + 
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_2500.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_2500.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['ymax'])) +
+           guides(colour = FALSE) +
+           labs(title = "2."),
+         
+         ggplot() +
+           geom_sf(data = hex_ita_10km_smpl.sf %>% 
+                     st_transform(4326), fill = NA) +
+           geom_sf(data = italy_comune_smpl.sf %>% 
+                     st_transform(4326), fill = NA, colour = 'gray', size = .2) +
+           geom_sf(data = st_intersection(italy_comune_pnt_hex_smpl.sf %>%
+                                            st_transform(4326),
+                                          my_bbox_buff_2500.sf),
+                   size = 2, aes(colour = as.factor(hex_id))) + 
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_2500.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_2500.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_2500.sf)['ymax'])) +
+           guides(colour = FALSE) +
+           labs(title = "3."),
+         ncol = 3))
+
+```
+
+![](../fig/comune_to_hex_grid.png)
+
+## Intersection between areas and hexagon cells for continuous variables
+
+When continuous variables were reported for a grid of cells, as with air quality and atmospheric data, or when count variables were reported at the level of comune for multiple income brackets, as in the case of income data, the variable for each hexagonal cell was computed as the average of the values reported for the intersecting cells (or comune) weighted according the extension of the area of intersection.
 
 ```{r}
-italy_comune.sf <- 
-  read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_clipped_to_hex.shp")
+r <- 
+  raster(sprintf('../air_quality/no2_conc.tiff', var), band = 10)
+res <- 
+  raster::extract(r, st_transform(hex_ita_10km_smpl.sf, 4326), fun = mean, weights  = T)
 
-ita_reg.sf <- 
-  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
+hex_ita_10km_smpl.sf$mean_value <- res[,1]
 
-ggsave(file = "../fig/comune_lombardy.pdf", 
-       ggplot() +  
-         scale_fill_viridis() +
-         geom_sf(data = italy_comune.sf %>% 
-                   dplyr::filter(COD_REG == 3)  
-                 %>% st_transform(4326), 
-                 colour = 'red', size = 0.3, fill = NA) +
-         geom_sf(data = hex_ita_10km.sf %>% 
-                   st_transform(4326), 
-                 fill = NA, colour = "white", alpha = .5) +
-         geom_sf(data = ita_reg.sf %>% 
-                   filter(COD_REG == 3), 
-                 fill = NA, 
-                 colour = 'white', size = 1.5) +
-         coord_sf(xlim = c(8.51475, 11.31198), 
-                  ylim = c(44.69240, 46.58386)) +
-         labs(x = NULL, y = NULL) +
-         guides(fill = FALSE))
+r_spdf <- 
+  as(r, "SpatialPixelsDataFrame")
+r_spdf <- 
+  as.data.frame(r_spdf)
+colnames(r_spdf) <- 
+  c("value", "x", "y")
+
+ggsave(file = "../fig/grid_to_hex.pdf", width = 10, height = 4,
+       grid.arrange(
+         ggplot() +  
+           geom_tile(data=r_spdf, aes(x=x, y=y, fill=value), alpha=0.8) +
+           scale_fill_viridis(limits = c(5,50)) +
+           geom_sf(data = st_transform(hex_ita_10km_smpl.sf, 4326),
+                   fill = NA, colour = 'white') +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_12000.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_12000.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_12000.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_12000.sf)['ymax'])) +
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           labs(x=NULL,y=NULL)  +
+           guides(fill = FALSE),
+         ggplot() +  
+           geom_sf(data = st_transform(hex_ita_10km_smpl.sf, 4326), aes(fill = mean_value)) +
+           scale_fill_viridis(limits = c(5,50)) +
+           coord_sf(xlim = c(st_bbox(my_bbox_buff_12000.sf)['xmin'], 
+                             st_bbox(my_bbox_buff_12000.sf)['xmax']), 
+                    ylim = c(st_bbox(my_bbox_buff_12000.sf)['ymin'], 
+                             st_bbox(my_bbox_buff_12000.sf)['ymax'])) +
+           theme_bw() +
+           theme(axis.text = element_blank(),
+                 axis.ticks = element_blank()) +
+           labs(x=NULL,y=NULL) +
+           guides(fill = FALSE),
+         ncol = 2))
+       
+
 ```
+
+![](../fig/grid_to_hex.pdf)
+
+
+## Intersection between variables reported at the regional level and hexagon cells
+
+For variables reported at the regional level, each hexagon cell assumes the value reported for the region where it is located. In the case of a hexagonal cell intersecting more than one region, the cell is assigned to the region with the largest intersection area.
 
 # Variables
 
-## Dependent variable
+## Excess mortality
+
+```{r}
+
+all_comune <- 
+  unique(raw_dead_dat.df$COD_PROVCOM[raw_dead_dat.df$T_15 != "n.d."])
+complete_comune <- 
+  unique(raw_dead_dat.df$COD_PROVCOM[raw_dead_dat.df$T_20 != "n.d."])
+```
+
+
+Excess mortality is based on Istat figures published in July 2020 ([link](https://www.istat.it/it/archivio/240401)). 
+
+Figures for deaths recorded in every calendar day for the period 2015-19 are reported for `r length(all_comune)` *comune*. Figures for deaths recorded for each calendar day for the first five months of 2020 are reported for `r length(complete_comune)` *comune* (or `r round(length(complete_comune)/length(all_comune)*100,2)`% of the total). In 2019, these `r length(complete_comune)` *comune* reported `r round(sum(raw_dead_dat.df$T_19[raw_dead_dat.df$COD_PROVCOM %in% complete_comune]) / sum(raw_dead_dat.df$T_19)*100,2)`% of the number of deaths reported in Italy. The following table shows the proportion of the total number of deaths reported by the these `r length(complete_comune)` *comune*  by Region. 
+
+```{r}
+raw_dead_dat.df %>%
+  dplyr::group_by(NOME_REGIONE) %>%
+  dplyr::summarize(`pop. covered %` = sum(T_19[CL_ETA >= 15 & 
+                       COD_PROVCOM %in% complete_comune]  / 
+                  sum(T_19[CL_ETA >= 15]))) %>%
+  dplyr::arrange(desc(`pop. covered %`)) %>%
+  kable(format = 'latex')
+```
+
 
 ```{r}
 m <- 
@@ -188,10 +541,7 @@ model_vars.df <-
   model_vars.df %>% filter(day < as.Date("2020-05-15"))
 ```
 
-
-## Imputation
-
-```{r}
+```{r imputation}
 model_vars.df$dist_sd_diff17[
   !is.finite(model_vars.df$dist_sd_diff17)] <- 0
 model_vars.df$dist_sd_lag4_diff17[
@@ -199,9 +549,42 @@ model_vars.df$dist_sd_lag4_diff17[
 ```
 
 
-## Air quality
+We compute excess mortality is computed through the following steps:
 
-### Raw data format
+1. The daily number of deaths reported for each *comune* between 2015 and 2020 is mapped onto our hexagon cells with the methods detailed above for counted variables. 
+2. For each year between 2015 and 2020, we calculated for each hexagon cell a centered 7-day moving average of the number of reported deaths over 65 in each comune for each year from 2015 to 2020. 
+3. For each calendar day, the mean and the standard deviation of the moving averages from 2015 to 2019 are calculated. 
+4. For each calendar day, the difference between the 2020 moving average and the 2015-2019 mean is divided by the 2015-2019 standard deviation. In doing so, we define the standard deviation as the unit of measurement and normalise differences across cells due to population density. 
+5. We shifted the resulting time series backward by 17 days to the estimated day of the infection resulting in death instead of the actual day of reported death. 
+6. Infinite and non-number values resulting from division by zero are assigned an excess mortality value of zero. 
+
+With this method we are able to estimate the excess mortality for `r length(unique(model_vars.df$hex_id[!is.na(model_vars.df$dist_sd_diff17)]))` hexagon cells and for each day between `r format(min(model_vars.df$day), "%d %B %Y")` and `r format(max(model_vars.df$day), "%d %B %Y")`.
+
+The distribution of the resulting excess mortality variable is detailed over time and over space in the following figures. 
+
+![](../fig/excess_mortality_ts.pdf)
+
+![](../fig/excess_mortality_map.pdf)
+
+![](../fig/excess_mortality_north_map.pdf)
+
+
+## Air quality variables
+
+```{r}
+names(airquality.df)[2] <- "day"
+airquality_spread.df <- 
+  airquality.df %>% spread(var, value)
+
+airquality_spread.df <- 
+  airquality_spread.df %>%
+  dplyr::select(-pmwf_conc, -ecwb_conc, -ecff_conc)
+
+model_vars.df <- 
+  merge(model_vars.df, airquality_spread.df, by = c("hex_id","day"), all.x = T)
+```
+
+Air quality data are obtained from Copernicus Atmosphere Monitoring Service (CAMS, [link](https://ads.atmosphere.copernicus.eu/cdsapp#!/dataset/cams-europe-air-quality-forecasts)) with a 10 kilometres' resolution. In the following figures, CAMS cells are overlayed to our hexagon cells. 
 
 ```{r}
 r <- 
@@ -228,6 +611,42 @@ ggsave(file = "../fig/cams_lombardy.pdf",
          guides(fill = FALSE))
 ```
 
+![](../fig/cams_lombardy.pdf)
+
+In the following figures we map instead the evolution of selected air quality measures over Europe and Northern Italy.
+
+![](../fig/airquality_eur_PM2.5_eur.png)
+![](../fig/airquality_northita_PM2.5.png)
+
+![](../fig/airquality_eur_PM10_eur.png)
+![](../fig/airquality_northita_PM10.png)
+![](../fig/airquality_eur_Carbon monoxide_eur.png)
+![](../fig/airquality_northita_Carbon monoxide.png)
+![](../fig/airquality_eur_Nitrogen dioxide_eur.png)
+![](../fig/airquality_northita_Nitrogen dioxide.png)
+
+![](../fig/airquality_eur_Nitrogen monoxide_eur.png)
+![](../fig/airquality_northita_Nitrogen monoxide.png)
+
+## Atmosphere variables
+
+Atmosphere data are derived from ERA5 ([link](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-pressure-levels)) variables with a 30 kilometres' resolution. In the following figures, ERA5 cells are overlayed to our hexagon cells. 
+
+```{r}
+era5_climate_hex.df$day <- era5_climate_hex.df$date
+
+era5_climate_hex_spread.df <-
+  era5_climate_hex.df %>%
+  dplyr::select(-date) %>%
+  tidyr::pivot_wider(names_from = var, values_from = value,
+                     names_prefix = "era5_") %>%
+  dplyr::mutate(era5_rhum = RH(era5_temp, era5_dewp, isK = TRUE))
+
+model_vars.df <- 
+  merge(model_vars.df, 
+        era5_climate_hex_spread.df,
+        by = c("hex_id", "day"))
+```
 
 ```{r}
 r <- 
@@ -254,40 +673,12 @@ ggsave(file = "../fig/era5_lombardy.pdf",
          guides(fill = FALSE))
 ```
 
-
-```{r}
-names(airquality.df)[2] <- "day"
-airquality_spread.df <- 
-  airquality.df %>% spread(var, value)
-
-airquality_spread.df <- 
-  airquality_spread.df %>%
-  dplyr::select(-pmwf_conc, -ecwb_conc, -ecff_conc)
-
-model_vars.df <- 
-  merge(model_vars.df, airquality_spread.df, by = c("hex_id","day"), all.x = T)
-```
-
-## Atmosphere 
-
-```{r}
-era5_climate_hex.df$day <- era5_climate_hex.df$date
-
-era5_climate_hex_spread.df <-
-  era5_climate_hex.df %>%
-  dplyr::select(-date) %>%
-  tidyr::pivot_wider(names_from = var, values_from = value,
-                     names_prefix = "era5_") %>%
-  dplyr::mutate(era5_rhum = RH(era5_temp, era5_dewp, isK = TRUE))
-
-model_vars.df <- 
-  merge(model_vars.df, 
-        era5_climate_hex_spread.df,
-        by = c("hex_id", "day"))
-```
+![](../fig/era5_lombardy.pdf)
 
 
-## Census
+## Census variables
+
+Demographic variables are computed based on census counts at the level of 2011 census sections. The geographic distribution of the variables used in the model is showed in the following figures.
 
 ```{r}
 # model_vars.df <- 
@@ -364,6 +755,52 @@ model_vars.df <-
             .funs = list(log10 = myLog10))
 ```
 
+```{r}
+model_vars.df$median_density_km2 <-
+  pop_densities.df$median_density_km2[match(model_vars.df$hex_id,
+                                            pop_densities.df$hex_id)]
+
+model_vars.df$gini_over74 <-
+  pop_densities.df$gini_over74[match(model_vars.df$hex_id,
+                                     pop_densities.df$hex_id)]
+
+model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
+```
+
+```{r include = TRUE}
+
+this.sf <- hex_ita_10km.sf
+this.df <- model_vars.df[model_vars.df$day == as.Date("2020-01-01"),]
+
+censusPlot <- function(var) {
+  
+  this.sf$this_var <- 
+    this.df[[var]][match(this.sf$hex_id, this.df$hex_id)]
+
+  
+  ggplot(this.sf) +
+    geom_sf(aes(fill = this_var), colour = NA) +
+    scale_fill_viridis() +
+    theme_bw() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank()) +
+    labs(x = predictor_labels[var], fill = NULL)
+}
+
+plot_list <- 
+  lapply(c("perc_female", "perc_over_65", "gini_over74", 
+           "perc_work_outside_comune", "perc_families_over_4", 
+           "perc_employed", "perc_degree_over_workforce", 
+           "sum_agedcare_log10", "sum_construction_log10",
+           "sum_delivery_log10", "sum_education_log10", "sum_healthcare_log10",
+           "sum_hospitality_log10", "sum_manufacturing.ex_meat_log10",
+           "sum_manufacturing.meat_log10", 
+           "sum_other_log10", "sum_retail_log10", "sum_services_log10",
+           "sum_transport_log10", "sum_warehousing_log10", 
+           "sum_wholesaling_log10"), censusPlot)
+
+plot_grid(plotlist = plot_list, ncol = 5, align = 'v')
+```
 
 ```{r}
 ggsave(file = "../fig/excess_mortality_ts.pdf", width = 7, height = 4,
@@ -618,11 +1055,13 @@ ggsave(file = "../fig/excess_mortality_map.pdf", width = 14, height = 9,
 #   theme_bw() +
 #   guides(fill = FALSE)
 
-
 ```
 
+## Testing variables
 
-## Testing
+Testing data are based on official daily figures published by the Italian government ([link](https://github.com/pcm-dpc/COVID-19/)) and reported at the level of region. The first day for which figures are available is `r format(min(reg_testing.df$date), "%d %B %Y")`. The case-to-test ratio is computed dividing the 7-day center-aligned moving average of number of positive tests divided by the  7-day center-aligned moving average of the number of tests. 
+
+The following figure shows the evolution of the case-test ratio in the 20 Italian regions.
 
 ```{r}
 reg_testing.df$case_test_ratio <- 
@@ -630,7 +1069,9 @@ reg_testing.df$case_test_ratio <-
 
 ggplot(reg_testing.df, aes(x=date, y=case_test_ratio)) +
   geom_line() +
-  facet_wrap(denominazione_regione~.)
+  scale_y_continuous(labels = function(x)paste0(round(x*100),"%")) +
+  facet_wrap(denominazione_regione~.) + theme_bw() + 
+  labs(x = "case-test ratio", y=NULL)
 
 model_vars.df <- 
   merge(model_vars.df, reg_testing.df, 
@@ -639,7 +1080,56 @@ model_vars.df <-
         all.x = TRUE)
 ```
 
-## Lock Down
+## Lockdown
+
+For each hexagon cell, the percentage of the population estimated to be living under lockdown measures in computed through the following steps: 
+
+1. The two areas resulting from the union of the area of the *comune* targetted by the lockdown measures established on 23 February 2020 and 8 March 2020 respectively (see below) are computed. 
+2. For each hexagon cell the percentage of the population under lockdown measures was estimated to be 0\% (100\%) if the area of the cell was included (excluded) entirely by the two lockdown areas.
+3. When an hexagon cell was only partially covered by one of the two lockdown areas, the percentage of the population under lockdown measures was estimated by 
+  1. summing the count of the population of all the census sections pertaining to a *comune* under lockdown measures and, based on the census section's centroid, intersecting with the hexagon cell. 
+  2. dividing the resulting sum for the entire population estimated to live in the area of the hexagon cell (see above).
+
+The following *comune* were subjected to lockdown measures on 23 February 2020: `r cat(paste(italy_comune.sf$COMUNE[italy_comune.sf$PRO_COM_T %in% c("098010","098014","098026", "098019", "098035","098054","098002","098057", "098062","098047","028105")], collapse = ", "))`.
+
+```{r include=T}
+italy_comune.sf %>%
+  dplyr::filter(PRO_COM_T %in% 
+                  c("098010","098014","098026", "098019", "098035","098054",
+                    "098002","098057", "098062","098047","028105")) %>%
+  st_transform(4326) %>%
+  ggplot() +
+  geom_sf(fill = "red", colour = 'red') +
+  geom_sf(data = ita_reg.sf %>% 
+            st_transform(4326), fill = NA) +
+  theme_bw() +
+  coord_sf(xlim = c(8.51475, 12.5), 
+           ylim = c(44.69240, 46.58386)) +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+All the *comune* in Lombardy and in the the following *provincia*: Alessandria, Asti, Modena, Novara, Padua, Parma, Piacenza, Pesaro and Urbino, Reggio Emilia, Rimini, Treviso, Venice, Verbano-Cusio-Ossola, were subjected to lockdown measures on 08 March 2020.
+
+```{r include=T}
+italy_comune.sf %>%
+  dplyr::filter(PRO_COM_T %in% 
+                  c(italy_comune.sf$PRO_COM_T[italy_comune.sf$COD_REG == 3],
+    italy_comune.sf$PRO_COM_T[italy_comune.sf$COD_PROV %in% c(36,34,33,
+                                                35,99,41,
+                                                6,5,3,
+                                                103,2,28,
+                                                26,27)])) %>%
+  st_transform(4326) %>%
+  ggplot() +
+  geom_sf(fill = "red", colour = 'red') +
+  geom_sf(data = ita_reg.sf %>% 
+            st_transform(4326), fill = NA) +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+                                                
 
 ```{r}
 
@@ -728,11 +1218,63 @@ model_vars.df <-
 
 ```
 
+## Commuter-weighted network
 
-# Neighbours (using communiting weighted network)
+A network connecting the hexagon cells and weighted based on the number of people communiting between pairs of cells is estimated based on a *comune*-to-*comune* asymmetric matrix populated with the count of commuters on census day 2011.
+
+Consistently with the approach followed in computing other variables, we proceeded as following:
+
+1. For each *comune*, we computed how its 2011 population distributes across different hexagon cells so to have the following table
+
+| Comune ID | Hexagonal cell ID | Population prop. |
+|:---------:|:-----------------:|:----------------:|
+|     1     |         1         |        50%       |
+|     1     |         2         |        50%       |
+|     2     |         1         |        70%       |
+|     2     |         2         |        30%       |
+|     3     |         3         |        10%       |
+|     3     |         4         |        10%       |
+|     3     |         5         |        80%       |
+
+2. We joined the resulting table with the long version version of the asymmetric matrix, so to have the following table
+
+| From comune ID | From hexagonal cell ID | From population prop. | To comune ID | N. commuters |
+|:--------------:|:----------------------:|:---------------------:|:------------:|:------------:|
+|        1       |            1           |          50%          |       2      |      10      |
+|        1       |            1           |          50%          |       2      |      10      |
+|        1       |            1           |          50%          |       2      |      10      |
+|        1       |            1           |          50%          |       2      |      10      |
+|        2       |            1           |          70%          |       3      |      15      |
+
+3. We combined this last table with the table generated in the first step joining on `to Comune ID = Comune ID` resulting in 
+
+| ... | From hex. ID | From pop. % | ... | N. commuters | To hex. ID | To pop. % |
+|:---:|:------------:|:-----------:|:---:|:------------:|:----------:|:---------:|
+|  1  |       1      |     50%     |  2  |      10      |      2     |    30%    |
+|  1  |       1      |     50%     |  2  |      10      |      3     |    10%    |
+|  1  |       1      |     50%     |  2  |      10      |      4     |    20%    |
+|  1  |       1      |     50%     |  2  |      10      |      5     |    10%    |
+|  2  |       1      |     70%     |  3  |      15      |      4     |    100%   |
+
+4. For each row of the resulting table, we then computed $\texttt{weighted commuting} = \texttt{n. commuters} \times \texttt{from pop. %} \times \texttt{to pop. %}$ as the relationship between a pair of hexagonal cells definited by the communiting from  $comune_A$ to $comune_B$.
+
+5. For each pair of hexagon cells $A$ and $B$, we sum all the resulting $\texttt{weighted commuting}$ to obtain  $\texttt{weighted commuting}_{\vec{AB}}$ (which is different from $\texttt{weighted commuting}_{\vec{BA}}$).
+
+6. We created direct network mapping the asymmetric relationships between pairs of hexagonal cells, where each relation was assigned weight $\texttt{weighted commuting}_{\vec{AB}}$
+
+7. We simplify the directed network to obtain the undirected network with symmetrical relationship between pairs of hexagonal cell and weight $\texttt{weighted commuting}_{\overline{AB}}$ resulting from $\texttt{weighted commuting}_{\vec{AB}} + \texttt{weighted commuting}_{\vec{BA}}$ illustrated by the following Figure. 
+
+![](../fig/hex_commuters_network.pdf)
+
+The following Figure shows the same network and the communities identified by a community detection algorithm (A Clauset, MEJ Newman, C Moore: Finding community structure in very large networks, http://www.arxiv.org/abs/cond-mat/0408187).
+
+![](../fig/hex_commuters_network_north.pdf)
+
+## Neighboring excess mortality
+
+We computed neighboring excess mortality based on the commuter-weighted network detailed above. For each day and for each cell, neighboring excess mortality was the average excess mortality in the other cells on that day wighted according to the corresponding $\texttt{weighted commuting}_{\overline{AB}}$.
 
 ```{r}
-load("../comm-matrix/hex_commuting_net.g.RData")
 
 hex_commuting_net.el <- 
   as.data.frame(as_edgelist(hex_commuting_net.g, names = TRUE))
@@ -815,25 +1357,13 @@ model_vars.df <-
 model_vars.df$neigh_weighted_mean[is.na(model_vars.df$neigh_weighted_mean)] <- 0
 ```
 
-# Population Density
+## Road density
+
+The road density variable is computed based on the length of primary roads and based on OpenStreetMap data. For each hexagon cell, the total length of is computed by summing all the road segements contained in teh cell. Original data and length by cell is reported in the following figure.
+
+![](../fig/osm_primary_road.png)
 
 ```{r}
-model_vars.df$median_density_km2 <-
-  pop_densities.df$median_density_km2[match(model_vars.df$hex_id,
-                                            pop_densities.df$hex_id)]
-
-model_vars.df$gini_over74 <-
-  pop_densities.df$gini_over74[match(model_vars.df$hex_id,
-                                     pop_densities.df$hex_id)]
-
-model_vars.df$gini_over74[!is.finite(model_vars.df$gini_over74)] <- 0
-```
-
-# Road density
-
-```{r}
-load("../roads/primary_road_hex.df.RData")
-
 model_vars.df$road_length <- 
   primary_road_hex.df$tot_length[match(model_vars.df$hex_id,
                                        primary_road_hex.df$hex_id)]
@@ -866,10 +1396,12 @@ model_vars.df$neigh_sum_road_length_sqrt <-
 ```
 
 
-# Hotel rooms 
+## Hotel rooms 
+
+For each cell, we computed the number of hotel rooms based on data reported by Istat at the level of *comune* and according to the mapping method for count variables illustrated above.
 
 ```{r}
-load("../hotel-comune/hex_beds.df.RData")
+
 
 model_vars.df$hotel_beds <- 
   hex_beds.df$hotel_beds[match(model_vars.df$hex_id,
@@ -881,9 +1413,7 @@ model_vars.df$hotel_beds_log <- log(model_vars.df$hotel_beds + 1)
 ```
 
 
-# Smokers
-
-```{r}
+```{r Smokers}
 cod_reg.df <- 
   data.frame(CODREG = hex_ita_10km.sf$CODREG,
              REGIONE = hex_ita_10km.sf$REGIONE,
@@ -909,9 +1439,8 @@ model_vars.df$smokers <-
 
 ```
 
-# Health status
 
-```{r}
+```{r Health status}
 dat_health_status <- 
   read.csv("../health_status_reg/DCCV_AVQ_PERSONE_19062020065748989.csv") %>%
   dplyr::filter(grepl("IT([A-Z])(\\d+|[A-Z])", ITTER107) &
@@ -965,12 +1494,19 @@ model_vars.df <-
         by = "CODREG")
 ```
 
-# Icu beds
+## Icu beds
 
 ```{r}
-library(igraph)
-load("../icu/hex_icu_beds.df.RData")
+load("../icu/address_unique.df.RData")
+```
 
+
+The number of ICU beds ("terapia intensiva") was computed based on a list of health centres compiled by the Ministry of Health and containing the street address. From that list, we geocoded `r nrow(address_unique.df)` street address with at least one ICU beds using the Google Maps API. The distribution of ICU beds is mapped in the following Figure.
+
+![](../fig/icu_beds.pdf)
+
+
+```{r}
 hex_ita_10km.sf$icu_beds <- 0
 hex_ita_10km.sf$icu_beds <- 
   hex_icu_beds.df$icu_beds[match(hex_ita_10km.sf$hex_id,
@@ -1004,10 +1540,7 @@ model_vars.df$perc_neigh5_icu_beds <-
 
 ```
 
-# Income 
-
-```{r}
-load("../income/hex_income.df.RData")
+```{r Income}
 
 hex_income.df <- 
   hex_income.df %>%
@@ -1022,6 +1555,8 @@ model_vars.df$perc_low_income <-
 
 
 # Modelling
+
+## Standardised coefficient table
 
 ```{r}
 hex_wt_missing_value <- 
@@ -1147,73 +1682,7 @@ do.call("grid.arrange", c(plotlist, ncol=5))
 ```
 
 
-```{r}
-predictor_labels <- 
-  c(dist_sd_lag4_diff17 = "past excess mortality",
-    neigh_weighted_mean = "neighbouring excess mortality",
-
-    pm2p5_conc = "PM2.5 conc.",
-    pm10_conc = "PM10 conc.",
-    no_conc = "nitrogen monoxide conc.",
-    o3_conc = "ozone conc.",
-    co_conc = "carbon monoxide conc.",
-    no2_conc = "nitrogen dioxide conc.",
-    so2_conc = "sulphur dioxide",
-    
-    era5_temp = "temperature", 
-    era5_rhum = "relative humidity", 
-    era5_prec = "precipitation",
-    
-    perc_breast_cancer = "perc. breast cancer incidence (reg.)",
-    perc_colorectal_cancer = "perc. colorectal cancer incidence (reg.)",
-    perc_lung_cancer = "perc. lung cancer incidence (reg.)",
-    CHRONIC_DIAB = "perc. diabetes (reg.)",
-    CHRONIC_HYP  = "perc. hypertension (reg.)", 
-    CHRONIC_BRONC = "perc. bronchitis (reg.)", 
-    CHRONIC_ALLER = "perc. allergies (reg.)",
-    CHRONIC_HEART = "perc. heart cond. (reg.)",
-    smokers = "perc. smokers (reg.)",
-    
-    median_density_km2 = "median density",
-    road_length = "tot. length primary roads",
-    
-    perc_employed = "perc. employed",
-    perc_degree_over_workforce = "perc. degree (over workforce)",
-    perc_female = "perc. females", 
-    perc_over_65 = "perc. over 65",
-    gini_over74 = "over 74 conc.",
-    perc_work_outside_comune = "perc. working out of comune",
-    perc_families_over_4 = "perc. families over 4",
-    
-    hotel_beds_log = "log. hotel beds",
-    
-    sum_agedcare_log10 = "log. agedcare employees",
-    sum_healthcare_log10 = "log. healthcare employees",
-    sum_manufacturing.ex_meat_log10 = "log. manufactoring employees (exc. meat)",
-    sum_manufacturing.meat_log10 = "log. manufactoring employees (meat only)",
-    sum_services_log10 = "log. services employees",
-    sum_warehousing_log10 = "log. warehousing employees",
-    sum_transport_log10 = "log. transportation employees",
-    sum_delivery_log10  = "log. delivery employees",
-    sum_construction_log10 = "log. construction employees",
-    sum_education_log10 = "log. education employees",
-    sum_hospitality_log10 = "log. hospitality employees",
-    sum_retail_log10 = "log. retail employees",
-    sum_wholesaling_log10 = "log. wholesaling employees",
-    sum_other_log10 = "log. other employees",
-    
-    perc_low_income = "perc. low income",
-    case_test_ratio = "cases vs tests ratio (reg.)",
-    perc_neigh5_icu_beds = "perc. ICU beds 50km radius",
-    `dist_sd_lag4_diff17:perc_pop_lockdown` = "past excess mortality X perc. lockdown",
-    `perc_pop_lockdown:neigh_weighted_mean` = "neighbouring excess mortality X perc.  lockdown",
-    `dist_sd_lag4_diff17:neigh_weighted_mean` = "past excess mortality X neighbouring excess mortality",
-    `dist_sd_lag4_diff17:perc_pop_lockdown:neigh_weighted_mean` = "past excess mortality X neighbouring excess mortality X  perc. lockdown")
-```
-
-# Multilevel 
-
-```{r}
+```{r Multilevel}
 library(lme4)
 multilevel_pm2p5 <- 
   lmer(formula = dist_sd_diff17 ~ 
@@ -1286,7 +1755,8 @@ multilevel_pm10 <-
        data = model_vars_std.df)
 ```
 
-```{r}
+```{r, results = 'asis', include = T}
+
 coef_1 <- 
   names(coef(pooled_pm2p5))
 coef_1.df <- 
@@ -1308,12 +1778,24 @@ coef_2.df$labs[coef_2.df$coef == "(Intercept)"] <- "(Intercept)"
 coef_2.df$labs[coef_2.df$coef == "perc_pop_lockdown"] <- "perc. lockdown"
 
 stargazer(pooled_pm2p5, pooled_pm10, multilevel_pm2p5, multilevel_pm10, 
+          dep.var.labels = "Excess mortality (backdated by 17 days)",
+          header=FALSE, type='latex',
+          covariate.labels = c(coef_1.df$labs[2:5], coef_2.df$labs[5:nrow(coef_2.df)]),
+          single.row=TRUE, 
+          font.size = "scriptsize", column.sep.width = "-15pt")
+```
+
+```{r}
+stargazer(pooled_pm2p5, pooled_pm10, multilevel_pm2p5, multilevel_pm10, 
           type = 'html', dep.var.labels = "Excess mortality (backdated by 17 days)",
           out = '../fig/regression_table.html',
           covariate.labels = c(coef_1.df$labs[2:5],coef_2.df$labs[5:nrow(coef_2.df)]),
           single.row=TRUE)
 ```
 
+\pagebreak
+
+## Standardised coefficient plot
 
 ```{r}
 pooled_pm2p5_coef.df <- 
@@ -1418,12 +1900,10 @@ ggsave(filename = "../fig/estimate_selectedvars.pdf", width = 10, height = 12,
        ))
 ```
 
+![](../fig/estimate_entiremodel.pdf)
 
 ```{r, fig.width = 10, fig.height = 40, eval = FALSE}
 all_days <- unique(hex_dead_wide.df$day[!is.na(hex_dead_wide.df$T_20)])
-
-region.sf <- 
-  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
 
 funPlot <- function(day) {
   this_dat <- hex_dead_wide.df[hex_dead_wide.df$day == day,] 
@@ -1468,11 +1948,6 @@ base_geom_line <-
 ```
 
 ```{r animation, eval = F}
-
-region.sf <- 
-  read_sf("../shapefile/Italy/Limiti01012020/Reg01012020/Reg01012020_WGS84.shp")
-province.sf <- 
-  read_sf("../shapefile/Italy/Limiti01012020/ProvCM01012020/ProvCM01012020_WGS84.shp")
 
 hex_dead_wide.df$dist_sd[is.infinite(hex_dead_wide.df$dist_sd)] <- 0
 hex_dead_wide.df$dist_sd[hex_dead_wide.df$dist_sd>200] <- 200
