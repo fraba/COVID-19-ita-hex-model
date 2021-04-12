@@ -1,7 +1,7 @@
 ---
 title: "Locked down comune"
 author: "Francesco Bailo"
-date: "01/06/2020"
+date: "24/03/2021"
 output: html_document
 ---
 
@@ -24,12 +24,38 @@ italy_raw.sf <-
   read_sf("../shapefile/Italy/Limiti01012020/Com01012020/Com01012020_WGS84.shp")
 ```
 
-```{r}
-# 23 Feb - 8 March
-feb23_locked_down <- 
+
+```{r matrix-2020}
+
+lockdown.m <- 
+  matrix(0, 
+         nrow = nrow(italy_raw.sf), 
+         ncol = 366)
+
+rownames(lockdown.m) <- 
+  italy_raw.sf$PRO_COM_T
+
+colnames(lockdown.m) <- 
+  format(seq(from = as.Date("2020-01-01"), 
+             to = as.Date("2020-12-31"), 
+             by = "day"),
+         "%m%d")
+
+```
+
+
+```{r first-wave}
+
+feb23_lockdown <- 
   c("098010","098014","098026", "098019",
     "098035","098054","098002","098057",
     "098062","098047","028105")
+
+lockdown.m[rownames(lockdown.m) %in% feb23_lockdown,
+           format(seq(from = as.Date("2020-02-23"), 
+                      to = as.Date("2020-03-09"), 
+                      by = "day"),
+                  "%m%d")] <- 1
 
 mar8_locked_down <- 
   c(italy.sf$PRO_COM_T[italy.sf$COD_REG == 3],
@@ -39,162 +65,415 @@ mar8_locked_down <-
                                                 103,2,28,
                                                 26,27)])
 
-italy_raw.sf$feb23_locked_down <- 
-  italy_raw.sf$PRO_COM_T %in% feb23_locked_down
-italy_raw.sf$mar8_locked_down <- 
-  italy_raw.sf$PRO_COM_T %in% mar8_locked_down
+lockdown.m[rownames(lockdown.m) %in% mar8_locked_down,
+           format(seq(from = as.Date("2020-03-08"), 
+                      to = as.Date("2020-03-09"), 
+                      by = "day"),
+                  "%m%d")] <- 1
 
-ggplot(italy_raw.sf %>% filter(COD_PROV == 98)) +
-  geom_sf(aes(fill = !PRO_COM_T %in% feb23_locked_down), size = .05) +
-  scale_fill_grey() +
-  theme_bw() + theme(legend.position = 'bottom')
+lockdown.m[,
+           format(seq(from = as.Date("2020-03-10"), 
+                      to = as.Date("2020-05-03"), 
+                      by = "day"),
+                  "%m%d")] <- 1
 
-ggplot(italy_raw.sf) +
-  geom_sf(aes(fill = !PRO_COM_T %in% mar8_locked_down), size = .05) +
-  scale_fill_grey() +
-  theme_bw() + theme(legend.position = 'bottom')
 ```
+
+```{r second-wave}
+
+vec = c(
+  
+  "15-22 Oct 2020" = 
+    c("007059", "007072","007015"),
+  
+  "6 Nov - 5 Dec 2020" = 
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(2)],
+  
+  "6-28 Nov 2020" = 
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(1,3)],
+  
+  "16-30 Oct 2020" =
+    c("021092", "021052"),
+  
+  "31 Oct - 8 Nov 2020" =
+    c("021040","021086","021016", "021070", "021046"),
+  
+  "5-8 Nov 2020" = 
+    c("021094","021035", "021071", "021036", 
+      "021103", "021107", "021008", "021105",
+      "021009", "021116", "021113", "021115",
+      "021050", "021058", "021055", "021029", 
+      "021012", "021065"),
+  
+  "6-8 Nov 2020" =
+    c("021060", "39010", "021081", "021067", 
+      "021013", "021034", "021015", "021022",
+      "021057", "021106"),
+  
+  "9 Nov - 5 Dec 2020" =
+    italy.sf$PRO_COM_T[italy.sf$COD_PROV %in% c(21)],
+  
+  "16-30 Nov 2020" = 
+    c("022048", "022011", "022009"),
+  
+  "19 Oct - 2 Nov 2020" =
+    c("030189"),
+  
+  "15 Nov - 5 Dec 2020" =
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(9, 15)],
+  
+  "21-22 Oct 2020" =
+    c("044001", "044001"),
+  
+  "28 Aug - 1 Sep 2020" =
+    "066052",
+  
+  "18 Nov - 6 Dec 2020" =
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(13)],
+  
+  "12 Dec 2020" =
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(13)],
+  
+  "16-24 Oct 2020" = 
+    c("063086"),
+  
+  "20 Oct - 4 Nov 2020" =
+    c("063005"),
+  
+  "23 Oct - 14 Nov 2020" =
+    c("064007"),
+  
+  "25 Oct - 7 Nov 2020" =
+    c("061053", "061049"),
+  
+  "2-20 Nov 2020" =
+    c("065041"),
+  
+  "9-19 Nov 2020" =
+    c("065080"),
+  
+  "11-16 Nov 2020" =
+    c("065127"),
+  
+  "12-22 Nov 2020" =
+    "062001",
+  
+  "3-13 Oct 2020" =
+    c("076046", "076091"),
+  
+  "3-13 Nov 2020" =
+    c("076036", "077013"),
+  
+  "9-30 Nov 2020" =
+    c("077016"),
+  
+  "24-30 Sep 2020" =
+    c("102043"),
+  
+  "5 Oct - 7 Nov 2020" =
+    "080089",
+  
+  "15-28 Oct 2020" =
+    "079148",
+  
+  "16 Oct - 7 Nov 2020" =
+    "080081",
+  
+  "19 Oct - 7 Nov 2020" =
+    c("078034", "078156"),
+  
+  "31 Oct - 7 Nov 2020" =
+    c("078075", "078110", "078143", 
+      "078155", "101002", "080037",
+      "080003", "080069", "080093"),
+  
+  "6-28 Nov 2020" =
+    italy.sf$PRO_COM_T[italy.sf$COD_REG %in% c(18)],
+  
+  "2-6 Dec 2020" =
+    c("101016", "080022"),
+  
+  "2-12 Dec 2020" = 
+    c("080007", "080060", "080015",
+      "101009", "101013", "102021"),
+  
+  "5-12 Oct 2020" = 
+    c("082080"),
+  
+  "13 Oct - 2 Nov 2020" = 
+    c("083030"),
+  
+  "17-24 Oct 2020" =
+    c("082047"),
+  
+  "17 Oct - 7 Nov 2020" =
+    "084034",
+  
+  "19-26 Oct 2020" =
+    "087038",
+  
+  "23 Oct - 7 Nov 2020" =
+    "082072",
+  
+  "3-17 Nov 2020" =
+    "086007",
+  
+  "3 Nov - 3 Dec 2020" =
+    "088012",
+  
+  "8 Nov - 3 Dec 2020" =
+    c("083017", "083090"),
+  
+  "15 Nov - 3 Dec 2020" =
+    c("087009" , "082048"),
+  
+  "21 Nov - 3 Dec 2020" =
+    c("082030", "088001", "088003", "084008", 
+      "087057"),
+  
+  "22 Sep - 11 Oct 2020" =
+    c("091067"),
+  
+  "26 Sep - 2 Oct 2020" =
+    c("095002"),
+  
+  "27 Sep - 10 Oct 2020" =
+    "091028",
+  
+  "29 Sep - 7 Oct 2020" =
+    "111081",
+  
+  "19-25 Oct 2020" =
+    "095041",
+  
+  "31 Oct - 4 Nov 2020" =
+    "095034",
+  
+  "11 Nov - 7 Dec 2020" =
+    "091083",
+  
+  "12 Nov - 30 Dec 2020" =
+    "095063",
+  
+  "14-29 Nov 2020" =
+    "091061",
+  
+  "15-29 Nov 2020" =
+    "091055",
+  
+  "21 Nov - 8 Dec 2020" =
+    "091071",
+  
+  "23 Nov - 4 Dec 2020" =
+    "091024")
+
+second_wave_PRO_COM_T.df = 
+  data.frame(period_str = gsub("2020(.*)\\b", "2020", names(vec)),
+             PRO_COM_T = vec)
+
+parseFromDate <- function(x) {
+  if (grepl("\\d{1,2}-\\d{1,2}", x)) {
+    x <- gsub("-\\d{1,2}", "", x)
+    return(as.character(as.Date(x, format = "%d %B %Y")))
+  } else {
+    x <- gsub("- \\d{1,2} [A-Z]{1}[a-z]{2} ", "", x)
+    return(as.character(as.Date(x, format = "%d %B %Y")))
+  }
+}
+
+parseToDate <- function(x) {
+  if (grepl("\\d{1,2}-\\d{1,2}", x)) {
+    x <- gsub("\\d{1,2}-", "", x)
+    return(as.character(as.Date(x, format = "%d %B %Y")))
+  } else {
+    x <- gsub("\\d{1,2} [A-Z]{1}[a-z]{2} - ", "", x)
+    return(as.character(as.Date(x, format = "%d %B %Y")))
+  }
+}
+
+second_wave_PRO_COM_T.df$from <- 
+  as.Date(sapply(second_wave_PRO_COM_T.df$period_str, parseFromDate, simplify = T,
+         USE.NAMES = F))
+
+second_wave_PRO_COM_T.df$to <- 
+  as.Date(sapply(second_wave_PRO_COM_T.df$period_str, parseToDate, simplify = T,
+         USE.NAMES = F))
+
+unique_intervals <- 
+  second_wave_PRO_COM_T.df %>%
+  dplyr::select(from, to) %>%
+  dplyr::distinct()
+
+for (i in 1:nrow(unique_intervals)) {
+  
+  this_PRO_COM_T <- 
+    second_wave_PRO_COM_T.df %>%
+    dplyr::filter(from == unique_intervals$from[i] &
+                    to == unique_intervals$to[i])
+    
+  lockdown.m[rownames(lockdown.m) %in% this_PRO_COM_T$PRO_COM_T,
+             format(seq(from = unique_intervals$from[i], 
+                      to = unique_intervals$to[i], 
+                      by = "day"),
+                  "%m%d")] <- 
+    1
+  
+}
+
+lockdown.m[,
+           c("1224", "1225")] <- 1
+
+data.frame(date = as.Date(paste(colnames(lockdown.m), "2020"), format = "%m%d%Y"),
+           n = apply(lockdown.m, 2, sum)) %>%
+ggplot(aes(x = date, y = n)) +
+  geom_line()
+
+save(lockdown.m, file = "../locked-down-comune/lockdown.m.RData")
+
+```
+
+
+```{r}
+
+plotFun <- 
+  function(day) {
+    ggplot(italy_raw.sf) +
+      geom_sf(aes(fill = !PRO_COM_T %in% rownames(lockdown.m)[lockdown.m[,day] == TRUE]), size = .05) +
+      scale_fill_grey() +
+      theme_bw() + theme(legend.position = 'bottom')
+  }
+
+```
+
 
 ## Census
 
 ```{r}
-census_lonlat_sez_2011 <- read_csv("/mnt/rstudio/rstudio_wd/COVID-19-ita-hex-model/census_2011/census_lonlat_sez_2011.csv")
+census_lonlat_sez_2011 <- 
+  read_csv("../census_2011/census_lonlat_sez_2011.csv")
 
-census_population_sez_2011 <- read_csv("/mnt/rstudio/rstudio_wd/COVID-19-ita-hex-model/census_2011/census_population_sez_2011.csv.zip")
+census_population_sez_2011 <-
+  read_csv("../census_2011/census_population_sez_2011.csv.zip")
 ```
 
 
 ```{r}
-italy_feb23_locked_down.sf <- 
-  italy_raw.sf %>% dplyr::filter(feb23_locked_down) %>% st_union()
 
-italy_mar8_locked_down.sf <- 
-  italy_raw.sf %>% dplyr::filter(mar8_locked_down) %>% st_union()
+res <- 
+  diff(apply(lockdown.m, 2, sum))
+
+change_points <- 
+  names(res)[res != 0]
+
+nationwide_lockdown.v <-
+  character()
+
+## Nation wide lockdown
+
+for(this_day in change_points) {
+  if (sum(lockdown.m[,this_day]) == nrow(lockdown.m) |
+      sum(lockdown.m[,this_day]) == 0) {
+    nationwide_lockdown.v <-
+      c(nationwide_lockdown.v, this_day)
+  }
+}
 
 
-hex_ita_1km.sf$area <- as.numeric(st_area(hex_ita_1km.sf))
+## 
 
-# Area difference
+change_points <- 
+  change_points[!change_points %in% nationwide_lockdown.v]
 
-## Feb 23
-res_feb23 <- 
-  st_intersection(hex_ita_1km.sf, italy_feb23_locked_down.sf)
+italy_sf_lockdown.list <- 
+  list()
 
-res_feb23$diff_area <- 
-  86602540 - as.numeric(st_area(res_feb23))
-
-res_feb23_reduced <-
-  res_feb23 %>% filter(diff_area > 0)
-
-res_feb23_full <- 
-  res_feb23 %>% filter(diff_area == 0)
-
-res_feb23_reduced.pnt <- 
-  st_intersection(st_as_sf(census_lonlat_sez_2011, 
-                        coords = c("lon", "lat"), 
-                        crs = 4326) %>%
-                    filter(sez2011 %in% 
-                             census_population_sez_2011$sez2011) %>%
-                 st_transform(32632), 
-               res_feb23_reduced)
-
-res_feb23_reduced.pnt$P1.sez <- 
-  census_population_sez_2011$P1[match(res_feb23_reduced.pnt$sez2011,
-                                      census_population_sez_2011$sez2011)] 
-
-res_feb23_reduced.tab <- 
-  res_feb23_reduced.pnt %>% group_by(hex_id) %>% 
-  summarize(P1 = sum(P1.sez))
+for(this_day in change_points) {
   
-res_feb23_reduced$P1_feb23_locked_down <-
-  res_feb23_reduced.tab$P1[match(res_feb23_reduced$hex_id,
-                                 res_feb23_reduced.tab$hex_id)]
-
-res_feb23_reduced$P1_feb23_locked_down[is.na(
-  res_feb23_reduced$P1_feb23_locked_down)] <- 0
-
-res_feb23_full$P1_feb23_locked_down <- 
-  res_feb23_full$P1
-
-st_geometry(res_feb23_reduced) <- NULL
-st_geometry(res_feb23_full) <- NULL
-
-res_feb23 <- 
-  rbind(res_feb23_reduced %>% select(hex_id, P1, P1_feb23_locked_down),
-        res_feb23_full %>% select(hex_id, P1, P1_feb23_locked_down))
+  print(this_day)
   
-## Mar 9
-res_mar8 <- 
-  st_intersection(hex_ita_1km.sf, italy_mar8_locked_down.sf)
+  italy_sf_lockdown.list[[this_day]] <-
+    italy_raw.sf %>% 
+    dplyr::filter(PRO_COM_T %in%
+                                     rownames(lockdown.m)[
+                                       lockdown.m[,this_day] == 1
+                                     ]) %>% 
+    st_union()
+}
 
-res_mar8$diff_area <- 
-  max(as.numeric(st_area(res_mar8))) - as.numeric(st_area(res_mar8))
-
-res_mar8_reduced <-
-  res_mar8 %>% filter(diff_area > 0)
-
-res_mar8_full <- 
-  res_mar8 %>% filter(diff_area == 0)
-
-res_mar8_reduced.pnt <- 
-  st_intersection(st_as_sf(census_lonlat_sez_2011, 
-                        coords = c("lon", "lat"), 
-                        crs = 4326) %>%
-                    filter(sez2011 %in% 
-                             census_population_sez_2011$sez2011) %>%
-                 st_transform(32632), 
-               res_mar8_reduced)
-
-res_mar8_reduced.pnt$P1.sez <- 
-  census_population_sez_2011$P1[match(res_mar8_reduced.pnt$sez2011,
-                                      census_population_sez_2011$sez2011)] 
-
-res_mar8_reduced.tab <- 
-  res_mar8_reduced.pnt %>% group_by(hex_id) %>% 
-  summarize(P1 = sum(P1.sez))
-  
-res_mar8_reduced$P1_mar8_locked_down <-
-  res_mar8_reduced.tab$P1[match(res_mar8_reduced$hex_id,
-                                 res_mar8_reduced.tab$hex_id)]
-
-res_mar8_reduced$P1_mar8_locked_down[is.na(
-  res_mar8_reduced$P1_mar8_locked_down)] <- 0
-
-res_mar8_full$P1_mar8_locked_down <- 
-  res_mar8_full$P1
-
-st_geometry(res_mar8_reduced) <- NULL
-st_geometry(res_mar8_full) <- NULL
-
-res_mar8 <- 
-  rbind(res_mar8_reduced %>% select(hex_id, P1, P1_mar8_locked_down),
-        res_mar8_full %>% select(hex_id, P1, P1_mar8_locked_down))
+hex_ita_10km.sf$area <- 
+  as.numeric(st_area(hex_ita_10km.sf))
 
 hex_pop_lockdown <- 
-  data.frame(hex_id = hex_ita_1km.sf$hex_id,
-             P1 = hex_ita_1km.sf$P1)
+  data.frame(hex_id = hex_ita_10km.sf$hex_id,
+             P1 = hex_ita_10km.sf$P1)
 
-hex_pop_lockdown$P1_feb23_lockdown <- 
-  res_feb23$P1_feb23_locked_down[match(hex_pop_lockdown$hex_id, 
-                                       res_feb23$hex_id)]
+hex_pop_lockdown$P1[is.na(hex_pop_lockdown$P1)] <- 0
 
-hex_pop_lockdown$P1_mar8_lockdown <- 
-  res_mar8$P1_mar8_locked_down[match(hex_pop_lockdown$hex_id, 
-                                     res_mar8$hex_id)]
+for(this_day in change_points) {
+  
+  res <- 
+    st_intersection(hex_ita_10km.sf, 
+                    italy_sf_lockdown.list[[this_day]])
+  
+  res$diff_area <- 
+    86602540 - as.numeric(st_area(res))
+  
+  res_reduced <-
+    res %>% filter(diff_area > 0)
+  
+  res_full <- 
+    res %>% filter(diff_area == 0)
+  
+  res_reduced.pnt <- 
+    st_intersection(st_as_sf(census_lonlat_sez_2011, 
+                             coords = c("lon", "lat"), 
+                             crs = 4326) %>%
+                      filter(sez2011 %in% 
+                               census_population_sez_2011$sez2011) %>%
+                      st_transform(32632), 
+                    res_reduced)
+  
+  res_reduced.pnt$P1.sez <- 
+    census_population_sez_2011$P1[match(res_reduced.pnt$sez2011,
+                                        census_population_sez_2011$sez2011)] 
+  
+  res_reduced.tab <- 
+    res_reduced.pnt %>% group_by(hex_id) %>% 
+    summarize(P1 = sum(P1.sez))
+  
+  res_reduced$P1_locked_down <-
+    res_reduced.tab$P1[match(res_reduced$hex_id,
+                             res_reduced.tab$hex_id)]
+  
+  res_reduced$P1_locked_down[is.na(
+    res_reduced$P1_locked_down)] <- 0
+  
+  res_full$P1_locked_down <- 
+    res_full$P1
+  
+  st_geometry(res_reduced) <- NULL
+  st_geometry(res_full) <- NULL
+  
+  res <- 
+    rbind(res_reduced %>% dplyr::select(hex_id, P1, P1_locked_down),
+          res_full %>% dplyr::select(hex_id, P1, P1_locked_down))
+  
+  hex_pop_lockdown[[this_day]] <-
+    res$P1_locked_down[match(hex_pop_lockdown$hex_id, 
+                             res$hex_id)]
+  
+  hex_pop_lockdown[[this_day]][is.na(hex_pop_lockdown[[this_day]])] <- 0
+  
+}
 
-hex_pop_lockdown$P1[
-  is.na(hex_pop_lockdown$P1)] <- 0
+hex_pop_lockdown[['0310']] <- hex_pop_lockdown$P1
+hex_pop_lockdown[['1224']] <- hex_pop_lockdown$P1
 
-hex_pop_lockdown$P1_feb23_lockdown[
-  is.na(hex_pop_lockdown$P1_feb23_lockdown)] <- 0
+save(hex_pop_lockdown, file = "../locked-down-comune/hex_pop_lockdown.RData")
 
-hex_pop_lockdown$P1_mar8_lockdown[
-  is.na(hex_pop_lockdown$P1_mar8_lockdown)] <- 0
-
-save(hex_pop_lockdown, file = "hex_pop_lockdown.Data")
 ```
 
-```{r}
+```{r, eval = F}
 hex_pop_lockdown$P1_feb23_lockdown.perc <- 
   hex_pop_lockdown$P1_feb23_lockdown /
   hex_pop_lockdown$P1
@@ -203,23 +482,23 @@ hex_pop_lockdown$P1_mar8_lockdown.perc <-
   hex_pop_lockdown$P1_mar8_lockdown /
   hex_pop_lockdown$P1
 
-hex_ita_1km.sf$P1_feb23_lockdown.perc <-
+hex_ita_10km.sf$P1_feb23_lockdown.perc <-
   hex_pop_lockdown$P1_feb23_lockdown.perc[match(
-    hex_ita_1km.sf$hex_id, 
+    hex_ita_10km.sf$hex_id, 
     hex_pop_lockdown$hex_id
   )]
 
-hex_ita_1km.sf$P1_mar8_lockdown.perc <-
+hex_ita_10km.sf$P1_mar8_lockdown.perc <-
   hex_pop_lockdown$P1_mar8_lockdown.perc[match(
-    hex_ita_1km.sf$hex_id, 
+    hex_ita_10km.sf$hex_id, 
     hex_pop_lockdown$hex_id
   )]
 
-ggplot(hex_ita_1km.sf) +
+ggplot(hex_ita_10km.sf) +
   geom_sf(aes(fill = P1_feb23_lockdown.perc), colour = NA) +
   scale_fill_viridis() + theme_bw()
 
-ggplot(hex_ita_1km.sf) +
+ggplot(hex_ita_10km.sf) +
   geom_sf(aes(fill = P1_mar8_lockdown.perc), colour = NA) +
   scale_fill_viridis() + theme_bw()
 ```

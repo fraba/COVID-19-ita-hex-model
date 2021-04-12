@@ -3,7 +3,8 @@ title: "Dead"
 output: github_document
 ---
 
-```{r setup}
+```{r loading, eval = T}
+
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -15,56 +16,101 @@ library(ggplot2)
 library(knitr)
 
 raw_dat.df <- 
-  read_csv("istat-9-july-2020/comuni_giornaliero-decessi.csv.zip", 
-           locale = locale(encoding = "ISO-8859-1"))
-
-length(unique(raw_dat.df$COD_PROVCOM))
+  read_csv("istat-5-mar-2021/comuni_giornaliero_31dicembre.csv.zip", 
+           locale = locale(encoding = "ISO-8859-1")) %>%
+  select(!(REG:NOME_COMUNE) & !(TIPO_COMUNE) & !(M_11:F_20))
+  
+geo_ids.v <- 
+  unique(raw_dat.df$COD_PROVCOM)
 
 to_include <- unique(raw_dat.df$COD_PROVCOM[raw_dat.df$T_20 != "n.d."])
-length(to_include)
+
+length(to_include) == length(geo_ids.v)
 
 all_days <- unique(raw_dat.df$GE)
-all_days <- all_days[grepl("^01|^02|^03|^04|^05", all_days)]
+all_days <- all_days[grepl("^01|^02|^03|^04|^05|^06|^07|^08|^09|^10|^11|^12", all_days)]
 all_days <- all_days[order(all_days)]
 
-m <- 
-  expand.grid(to_include, 
-              all_days, 
-              paste0("T_", 15:20), 
-              unique(raw_dat.df$CL_ETA))
-colnames(m) <- c("COD_PROVCOM","GE", "year", "CL_ETA")
-dt <- data.table(m, key=colnames(m))
-
-dat.dt <- 
-  raw_dat.df %>%
-  dplyr::filter(COD_PROVCOM %in% to_include) %>%
-  dplyr::select(COD_PROVCOM, CL_ETA, GE, T_15:T_20) %>% 
-  tidyr::gather(year, value, T_15:T_20) %>%
-  data.table(key=colnames(m))
-
-dat.dt <-
-  merge(dat.dt, dt, all = T)
-dat.dt$value[is.na(dat.dt$value)] <- "0"
-
-dat_over65.dt <- 
-  dat.dt %>%
-  dplyr::filter(CL_ETA >= 14) %>% # Over 65
-  dplyr::mutate(value = as.numeric(value),
-                date = as.Date(paste0(year,GE), format("M_%y%m%d"))) %>%
-  dplyr::group_by(COD_PROVCOM, GE, year) %>%
-  dplyr::summarize(value = sum(value, na.rm = T))
-
-dat_over65.dt <-
-  dat_over65.dt %>%
-  dplyr::group_by(COD_PROVCOM, year) %>%
-  dplyr::arrange(as.character(GE)) %>%
-  dplyr::mutate(value_ma14 = rollmean(value, 14, align = 'right', fill = NA))
-
-save(dat_over65.dt, file = "dat_over65.dt.RData")
 ```
 
-```{r warning=F}
+```{r slicing, eval = F}
+
+# Slice 
+
+splitVec <- 
+  function(x, n) split(x, cut(seq_along(x), n, labels = FALSE)) 
+
+geo_ids.list <- 
+  splitVec(geo_ids.v, 100)
+
+dat_over65.list <- list()
+
+for (i in 1:length(geo_ids.list)) {
+  
+  print(i)
+  
+  m <- 
+    expand.grid(geo_ids.list[[i]], 
+                all_days, 
+                paste0("T_", 15:20), 
+                unique(raw_dat.df$CL_ETA))
+  colnames(m) <- c("COD_PROVCOM","GE", "year", "CL_ETA")
+  
+  dt <- 
+    data.table(m, key=colnames(m))
+  
+  dat.dt <- 
+    raw_dat.df %>%
+    dplyr::filter(CL_ETA >= 14) %>% # Over 65
+    dplyr::filter(COD_PROVCOM %in% geo_ids.list[[i]]) %>%
+    tidyr::gather(year, value, T_15:T_20) %>%
+    data.table(key=colnames(m))
+  
+  rm(m)
+  
+  dat.dt <-
+    merge(dat.dt, dt, all = T)
+  dat.dt$value[is.na(dat.dt$value)] <- "0"
+  
+  rm(dt)
+  
+  dat_over65.dt <- 
+    dat.dt %>%
+    dplyr::mutate(value = as.numeric(value)) %>%
+    dplyr::group_by(COD_PROVCOM, GE, year) %>%
+    dplyr::summarize(value = sum(value, na.rm = T), .groups = 'drop')
+  
+  rm(dat.dt)
+  
+  dat_over65.list[[i]] <-
+    dat_over65.dt %>%
+    dplyr::group_by(COD_PROVCOM, year) %>%
+    dplyr::arrange(as.character(GE)) %>%
+    dplyr::mutate(value_ma14 = rollmean(value, 14, align = 'right', fill = NA))
+  
+  rm(dat_over65.dt)
+  
+}
+
+```
+
+```{r rbindlist, eval=F}
+
+dat_over65.dt <- 
+  rbindlist(dat_over65.list)
+
+rm(dat_over65.list)
+
+save(all_days, dat_over65.dt, file = "dat_over65.dt.RData")
+
+```
+
+
+```{r eval=T}
+
 library(sf)
+
+load("dat_over65.dt.RData")
 
 load("../grid/hex_ita_10km.sf.RData")
 st_crs(hex_ita_10km.sf) <- st_crs(32632)
@@ -82,20 +128,10 @@ ggplot(italy.sf) +
   scale_fill_grey() + theme_bw() + labs(fill = "Data available")
 
 raw_dat.df %>%
-  dplyr::summarize(`pop. covered %` = sum(M_19[CL_ETA >= 15 & 
+  dplyr::summarize(`pop. covered %` = sum(T_19[CL_ETA >= 15 & 
                        COD_PROVCOM %in% to_include]  / 
-                  sum(M_19[CL_ETA >= 15]))) %>%
+                  sum(T_19[CL_ETA >= 15]))) %>%
   kable()
-
-raw_dat.df %>%
-  dplyr::group_by(NOME_REGIONE) %>%
-  dplyr::summarize(`pop. covered %` = sum(M_19[CL_ETA >= 15 & 
-                       COD_PROVCOM %in% to_include]  / 
-                  sum(M_19[CL_ETA >= 15]))) %>%
-  kable()
-
-sum(to_include %in% italy.sf$PRO_COM_T[italy.sf$COD_REG == 3]) / 
-  sum(italy.sf$COD_REG == 3)
   
 # italy.sf <-
 #   italy.sf %>%
@@ -158,6 +194,12 @@ colnames(hex_dead.df)[1] <- "hex_id"
 save(hex_dead.df, file = "hex_dead.df.RData")
 ```
 
+```{r}
+hex_dead.df %>%
+  dplyr::group_by(day)
+```
+
+
 ```{r, fig.width = 9, fig.height=13}
 
 plotFun <- function(day) {
@@ -176,7 +218,8 @@ plotFun <- function(day) {
 
 plots <- lapply(c("0101", "0115", "0131",
                   "0201", "0215", "0229",
-                  "0301", "0315", "0331"), 
+                  "0301", "0315", "0331",
+                  "1001", "1101", "1201"), 
                 plotFun)
 
 

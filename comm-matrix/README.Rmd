@@ -50,7 +50,7 @@ hex_PRO_COM_T_pop <-
   sez2011_population.df %>%
   dplyr::mutate(PRO_COM_T = 
                   sprintf("%06d", pro_com),
-                 pop = 
+                pop = 
                   P17 + P18 + P19 + P20 + P21  + P22 + P23 + P24 + P25 + P26) %>%
   dplyr::select(hex_id, PRO_COM_T, pop) %>%
   dplyr::group_by(hex_id, PRO_COM_T) %>%
@@ -183,20 +183,20 @@ ggsave(filename="../fig/hex_commuters_network.pdf",
          labs(x=NULL, y=NULL))
 
 
+hex_ita_10km.sf$community <-
+  hex_ita_10km_centroid.df$community[match(hex_ita_10km.sf$hex_id,
+                                           hex_ita_10km_centroid.df$hex_id)]
+
 ggsave(filename="../fig/hex_commuters_network_north.pdf",
        ggplot() +
-         geom_point(data = 
-                      hex_ita_10km_centroid.df %>%
-                      dplyr::filter(!is.na(community)),
-                    aes(x=X, y=Y, colour = as.factor(community)), 
-                    size = 5, alpha = .5) +
-         scale_colour_manual(values = c(brewer.pal(8, name = "Set2"),
-                                        brewer.pal(12, name = "Set3"),
-                                        brewer.pal(9, name = "Set1"))) +
-         # geom_encircle(data = 
-         #              hex_ita_10km_centroid.df %>%
-         #              dplyr::filter(!is.na(community)),
-         #              aes(x=X, y=Y, group = as.factor(community))) +
+         geom_sf(data = 
+                   hex_ita_10km.sf %>%
+                   dplyr::filter(!is.na(community)) %>%
+                   dplyr::group_by(community) %>%
+                   dplyr::summarize() %>%
+                   sf::st_transform(4326),
+                 fill = NA, 
+                 colour = 'black') +
          geom_curve(data = 
                       hex_commuting_net.el %>%
                       dplyr::filter(n > 100),
@@ -232,7 +232,341 @@ ggsave(filename="../fig/hex_commuters_network_north.pdf",
          theme_bw() +
          guides(colour = FALSE, size = FALSE, group = FALSE) +
          labs(x=NULL, y=NULL))
+```
+
+
+```{r Additional network analysis}
+
+comune_g <- 
+  graph_from_data_frame(dat,
+                        directed = F) %>%
+  igraph::simplify(remove.multiple = TRUE, 
+                   edge.attr.comb = list(n="sum"))
+
+comune_communities <- 
+    cluster_fast_greedy(comune_g,
+                      weights = E(comune_g)$n)
+
+ita_comune_2011.sf <- 
+  read_sf("../shapefile/Italy/Com2011/Com2011_WGS84.shp")
+
+ita_comune_2011.sf$community <- 
+  comune_communities$membership[match(ita_comune_2011.sf$PRO_COM_T,
+                                      comune_communities$names)]
+
+V(comune_g)$community <- 
+  comune_communities$membership
+
+bolle_g.list <- list()
+for (i in unique(V(comune_g)$community)) {
+  bolle_g.list[[i]] <- 
+    induced.subgraph(graph=comune_g, 
+                     vids=V(comune_g)$community == i)
+}
+
+net_stats.df <- 
+  data.frame()
+
+for (i in unique(V(comune_g)$community)) {
+  print(i)
+  net_stats.df <- 
+    rbind(net_stats.df, 
+          data.frame(community = i,
+                     diameter = diameter(bolle_g.list[[i]], 
+                                         directed = FALSE,
+                                         weights = E(bolle_g.list[[i]])$n),
+                     mean_n = mean(E(bolle_g.list[[i]])$n),
+                     median_n = median(E(bolle_g.list[[i]])$n),
+                     top_80 = quantile(E(bolle_g.list[[i]])$n, .8),
+                     sum = sum(E(bolle_g.list[[i]])$n)))
+}
+    
+    
   
 
+ita_community.sf <- 
+  ita_comune_2011.sf %>%
+  sf::st_simplify() %>%
+  dplyr::group_by(community) %>%
+  summarize()
+
+save(ita_community.sf, file = "comm-matrix/ita_community.sf.RData")
+
+comune_g.df <- 
+  as.data.frame(as_edgelist(comune_g, names = TRUE))
+comune_g.df$n <- 
+  E(comune_g)$n
+
+ita_comune_2011_centroids.df <-
+  as.data.frame(st_coordinates(st_centroid(ita_comune_2011.sf) %>% st_transform(4326)))
+ita_comune_2011_centroids.df$PRO_COM_T <- 
+  ita_comune_2011.sf$PRO_COM_T
+
+cities <- 
+  c("Milano","Torino","Genova","Brescia",
+    "Padova", "Bologna", "Bergamo",
+    "Crema", "Lodi", "Pavia", 
+    "Alessandria", "Novara", "Verona",
+    "Mantova", "Piacenza")
+
+labels.df <- 
+  ita_comune_2011_centroids.df %>%
+  dplyr::filter(PRO_COM_T %in% 
+                  ita_comune_2011.sf$PRO_COM_T[
+                    ita_comune_2011.sf$COMUNE %in% 
+                      cities
+                  ])
+
+labels.df$label <- 
+  ita_comune_2011.sf$COMUNE[match(labels.df$PRO_COM_T,
+                                  ita_comune_2011.sf$PRO_COM_T)]
+
+comune_g.df$lon.x <- 
+  ita_comune_2011_centroids.df$X[match(comune_g.df$V1,
+                                       ita_comune_2011_centroids.df$PRO_COM_T)]
+comune_g.df$lat.x <- 
+  ita_comune_2011_centroids.df$Y[match(comune_g.df$V1,
+                                       ita_comune_2011_centroids.df$PRO_COM_T)]
+comune_g.df$lon.y <- 
+  ita_comune_2011_centroids.df$X[match(comune_g.df$V2,
+                                       ita_comune_2011_centroids.df$PRO_COM_T)]  
+comune_g.df$lat.y <- 
+  ita_comune_2011_centroids.df$Y[match(comune_g.df$V2,
+                                       ita_comune_2011_centroids.df$PRO_COM_T)]
+
+
+ggplot() +
+  geom_sf(data = region.sf, fill = 'gray', colour = "black") +
+  geom_sf(data = ita_community.sf, fill = NA, colour = "white") +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+ggplot() +
+  geom_curve(data = 
+               comune_g.df %>%
+               dplyr::filter(n > 100),
+             aes(x = lon.x, y = lat.x, xend = lon.y, yend = lat.y,
+                 size = log(n)),
+             alpha = .55, curvature = -0.15) +
+  scale_size(range=c(.01, .05)) +
+  geom_sf(data = region.sf %>% 
+            st_transform(4326), fill = NA, size = .5) +
+  theme_bw() +
+    theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "20 regions") +
+  guides(size = FALSE)
+  
+
+ggplot() +
+  geom_curve(data = 
+               comune_g.df %>%
+               dplyr::filter(n > 100),
+             aes(x = lon.x, y = lat.x, xend = lon.y, yend = lat.y,
+                 size = log(n)),
+             alpha = .55, curvature = -0.15) +
+  scale_size(range=c(.01, .05)) +
+  geom_sf(data = ita_community.sf %>% 
+            st_transform(4326), fill = NA, size = .5) +
+  theme_bw() +
+    theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "25 commuting bubbles") +
+  guides(size = FALSE) +
+  coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Milano", "Bergamo", "Crema", 
+                                        "Lodi", "Pavia", "Brescia", "Novara"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = 55 - labels.df[labels.df$label %in% 
+                                      c("Milano", "Bergamo", "Crema", 
+                                        "Lodi", "Pavia", "Brescia", "Novara"), ]$Y,
+                   segment.size = 0.1) +
+    geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Torino","Genova",
+                                        "Alessandria"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -1.5,
+                   nudge_y = -.15,
+                   segment.size = 0.1) + 
+    geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Padova","Verona"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = +1.5,
+                   nudge_y = +.8,
+                   segment.size = 0.1) +
+      geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Piacenza","Bologna"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -.2,
+                   nudge_y = -.2,
+                   segment.size = 0.1)
+
+
+ggplot() +
+  # geom_curve(data =
+  #              comune_g.df %>%
+  #              dplyr::filter(n > 100),
+  #            aes(x = lon.x, y = lat.x, xend = lon.y, yend = lat.y,
+  #                size = log(n)),
+  #            alpha = .55, curvature = -0.15, colour = "white") +
+  # scale_size(range=c(.01, .05)) +
+    geom_sf(data = region.sf %>% 
+            st_transform(4326), fill = NA, size = .5, colour = "white", alpha = .8) +
+  geom_sf(data = ita_community.sf %>% 
+            st_transform(4326), fill = NA, size = .5) +
+  # theme_bw() +
+    theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "25 commuting bubbles") +
+  guides(size = FALSE) +
+  coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+      geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Novara", 
+                                        "Milano",
+                                        "Brescia"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = +1.5,
+                   nudge_x = -.6,
+                   segment.size = 0.1) +
+        geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Alessandria"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = -.1,
+                   nudge_x = -2,
+                   segment.size = 0.1) +
+          geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Mantova", "Verona"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = -.1,
+                   nudge_x = +2.5,
+                   segment.size = 0.1) +
+  geom_point(data = labels.df[labels.df$label %in% 
+                                      c("Alessandria", "Novara", 
+                                        "Mantova", "Milano",
+                                        "Brescia", "Verona"), ], 
+                   aes(x=X,y=Y))
+
+ggplot() +
+  geom_sf(data = hex_ita_10km_excess_mortality.sf %>%
+         dplyr::filter(!is.na(P1))%>% 
+            st_transform(4326),
+         aes(fill = days_over5sd), colour = NA) +
+  scale_fill_brewer(palette = "Set2", labels = c("<10", "+10")) +
+  geom_sf(data = ita_community.sf %>% 
+            st_transform(4326), fill = NA, size = .5) +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "25 commuting bubbles",
+       fill="giorni eccesso mortalità") +
+  guides(size = FALSE) +
+  coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Milano", "Bergamo", "Crema", 
+                                        "Lodi", "Pavia", "Brescia", "Novara"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = 55 - labels.df[labels.df$label %in% 
+                                      c("Milano", "Bergamo", "Crema", 
+                                        "Lodi", "Pavia", "Brescia", "Novara"), ]$Y,
+                   segment.size = 0.1) +
+    geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Torino","Genova",
+                                        "Alessandria"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -5,
+                   nudge_y = -.15,
+                   segment.size = 0.1) + 
+    geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Padova","Verona"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = +1.5,
+                   nudge_y = +.8,
+                   segment.size = 0.1) +
+      geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Piacenza","Bologna"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -.2,
+                   nudge_y = -1.2,
+                   segment.size = 0.1) +
+    geom_point(data = labels.df, 
+                   aes(x=X,y=Y))
+
+
+ggplot() +
+  geom_sf(data = hex_ita_10km_excess_mortality.sf %>%
+           st_transform(4326), 
+          aes(fill = peak_median), colour = NA) +
+  scale_fill_distiller(palette = "Reds", direction = 1, na.value = "white") +
+geom_sf(data = ita_community.sf %>% 
+          st_transform(4326), fill = NA, size = .5) +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "25 commuting bubbles",
+       fill="eccesso mortalità") +
+  guides(size = FALSE) +
+  coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14)) +
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Milano", "Bergamo", "Crema", 
+                                        "Lodi", "Pavia", "Brescia", "Novara"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_y = 55 - labels.df[labels.df$label %in% 
+                                              c("Milano", "Bergamo", "Crema", 
+                                                "Lodi", "Pavia", "Brescia", "Novara"), ]$Y,
+                   segment.size = 0.1) +
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Torino","Genova",
+                                        "Alessandria"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -5,
+                   nudge_y = -.15,
+                   segment.size = 0.1) + 
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Padova","Verona"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = +1.5,
+                   nudge_y = +.8,
+                   segment.size = 0.1) +
+  geom_label_repel(data = labels.df[labels.df$label %in% 
+                                      c("Piacenza","Bologna"), ], 
+                   aes(x=X,y=Y,label=label), 
+                   nudge_x = -.2,
+                   nudge_y = -1.2,
+                   segment.size = 0.1) +
+  geom_point(data = labels.df, 
+             aes(x=X,y=Y))
+
+
+ggplot() +
+  geom_sf(data = hex_ita_10km_excess_mortality.sf %>%
+         dplyr::filter(!is.na(P1))%>% 
+            st_transform(4326),
+         aes(fill = days_over5sd), colour = NA) +
+  scale_fill_brewer(palette = "Set2", labels = c("<10", "+10")) +
+  geom_sf(data = region.sf %>% 
+            st_transform(4326), fill = NA, size = .5, colour = "white", alpha = .8) +
+  geom_sf(data = ita_community.sf %>% 
+            st_transform(4326), fill = NA, size = .5) +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(x=NULL,y=NULL, caption = "25 commuting bubbles") +
+  guides(size = FALSE) +
+  coord_sf(ylim = c(43.6, 47.09416), xlim = c(6.612583,14))
+
+
+
+ita_community.sf$sum <- 
+  net_stats.df$sum[match(ita_community.sf$community,
+                              net_stats.df$community)]
+
+
+
+ggplot(ita_community.sf) +
+  geom_sf(aes(fill = log(sum))) +
+  scale_fill_viridis(direction =-1)
 
 ```
+

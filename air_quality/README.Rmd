@@ -1,7 +1,7 @@
 ---
 title: "Air quality (Covid-19 Research)"
 author: "Francesco Bailo"
-date: "25/04/2020"
+date: "17/02/2021"
 output: html_document
 ---
 
@@ -15,7 +15,6 @@ library(sf)
 library(ggplot2)
 library(viridis)
 library(raster)
-library(stars)
 library(parallel)
 library(gridExtra)
 
@@ -23,38 +22,34 @@ knitr::opts_chunk$set(echo = TRUE, message=F, warning=F)
 ```
 
 ```{r}
-r.stars <- 
-  read_stars("adaptor.cams_regional_fc.retrieve-1588048559.0080748-2499-7-2786eb2f-f42f-46e1-953e-8b830990de9b.nc")
-vars <- names(r.stars)
-vars
-```
-
-```{r}
-dates <- seq(as.Date("2020-01-01"), as.Date("2020-04-26"), by = 1)
+dates <- seq(as.Date("2020-01-01"), as.Date("2021-01-31"), by = 1)
 dates
 ```
 
-```{r}
+```{r eval = F}
 
 load("../grid/hex_ita_10km.sf.RData")
 st_crs(hex_ita_10km.sf) <- 32632
-hex_ita_1km.sf <- st_transform(hex_ita_1km.sf, 4326)
+hex_ita_10km.sf <- st_transform(hex_ita_10km.sf, 4326)
 
-fun1 <- function(i, var, hex_ita_1km.sf, dates) {
+fun1 <- function(i, var, hex_ita_10km.sf, dates) {
   require(raster)
   require(sf)
   r <- raster(sprintf('%s.tiff', var), band = i)
-  res <- raster::extract(r, hex_ita_1km.sf, fun = mean, weights  = T)
-  return(data.frame(hex_id = 1:nrow(hex_ita_1km.sf),
+  crs(r) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0" 
+  res <- raster::extract(r, hex_ita_10km.sf, fun = mean, weights  = T)
+  return(data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
                     date = dates[i],
                     var = var,
                     value = res[,1]))
 }
 
 cl <- makeCluster(10)
+
 airquality.df <- data.frame(stringsAsFactors = F)
+
 for (var in vars) {
-  res.list <- parLapply(cl, 1:length(dates), fun1, var, hex_ita_1km.sf, dates)
+  res.list <- parLapply(cl, 1:length(dates), fun1, var, hex_ita_10km.sf, dates)
   res.df <- bind_rows(res.list)
   airquality.df <- rbind(airquality.df, res.df)
 }
@@ -65,13 +60,159 @@ save(airquality.df, file = "airquality.df.RData")
 
 ```
 
-```{r}
+# Air quality
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125413.0054502-22845-1-cad9c77f-15c0-47a8-8ce9-10e4d00edcbf-co.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125413.0054502-22845-1-cad9c77f-15c0-47a8-8ce9-10e4d00edcbf-co.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125804.0726807-7813-3-70a95b2c-b7ba-46c1-b5f0-bbc46f157615-pm2p5.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125804.0726807-7813-3-70a95b2c-b7ba-46c1-b5f0-bbc46f157615-pm2p5.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125882.1716464-11197-1-8a9c9eef-8d33-4e22-9e56-a3473de9ed26-so2.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125882.1716464-11197-1-8a9c9eef-8d33-4e22-9e56-a3473de9ed26-so2.tif 
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125644.491702-19159-1-e65235a3-6c25-4200-a8c5-1b02554f0ee1-o3.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125644.491702-19159-1-e65235a3-6c25-4200-a8c5-1b02554f0ee1-o3.tif 
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125496.9399698-5567-1-6822baaf-51d3-4c17-8349-003737620856-no2.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125496.9399698-5567-1-6822baaf-51d3-4c17-8349-003737620856-no2.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125570.481306-21715-6-3b10908e-d9e3-4cb8-b5ee-7b297688ea35-no.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125570.481306-21715-6-3b10908e-d9e3-4cb8-b5ee-7b297688ea35-no.tif
+
+gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1614125727.6131365-20235-2-b7ad3e0d-a2c1-4ab6-abc1-591d7fc9bd59-pm10.grib -of Gtiff adaptor.cams_regional_fc.retrieve-1614125727.6131365-20235-2-b7ad3e0d-a2c1-4ab6-abc1-591d7fc9bd59-pm10.tif
+
+```{r eval = F}
+
+load("../grid/hex_ita_10km.sf.RData")
+
+st_crs(hex_ita_10km.sf) <- 32632
+require(raster)
+require(sf)
+require(sp)
+
+dates <- 
+  seq(from = as.Date("2020-01-01"), 
+      to = as.Date("2021-01-31"),
+      by = "day")
+
+pm10.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125727.6131365-20235-2-b7ad3e0d-a2c1-4ab6-abc1-591d7fc9bd59-pm10.tif')
+names(pm10.r) <- 
+  dates
+
+no.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125570.481306-21715-6-3b10908e-d9e3-4cb8-b5ee-7b297688ea35-no.tif')
+names(no.r) <- 
+  dates
+
+no2.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125496.9399698-5567-1-6822baaf-51d3-4c17-8349-003737620856-no2.tif')
+names(no2.r) <- 
+  dates
+
+so2.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125882.1716464-11197-1-8a9c9eef-8d33-4e22-9e56-a3473de9ed26-so2.tif')
+names(so2.r) <- 
+  dates
+
+pm2p5.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125804.0726807-7813-3-70a95b2c-b7ba-46c1-b5f0-bbc46f157615-pm2p5.tif')
+names(pm2p5.r) <- 
+  dates
+
+co.r <- 
+  brick('adaptor.cams_regional_fc.retrieve-1614125413.0054502-22845-1-cad9c77f-15c0-47a8-8ce9-10e4d00edcbf-co.tif')
+names(co.r) <- 
+  dates
+
+o3.r <-
+  brick('adaptor.cams_regional_fc.retrieve-1614125644.491702-19159-1-e65235a3-6c25-4200-a8c5-1b02554f0ee1-o3.tif')
+names(o3.r) <-
+  dates
+
+# crs(r) <- 
+#   "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0" 
+# 
+# ita.sp <- 
+#   readRDS("gadm36_ITA_0_sp.rds")
+
+hex_ita_10km.sp <- 
+  as_Spatial(hex_ita_10km.sf %>% st_transform(4326))
+
+pm10.extr <- 
+  raster::extract(pm10.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+pm2p5.extr <- 
+  raster::extract(pm2p5.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+co.extr <- 
+  raster::extract(co.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+no2.extr <- 
+  raster::extract(no2.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+no.extr <- 
+  raster::extract(no.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+o3.extr <- 
+  raster::extract(o3.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+so2.extr <- 
+  raster::extract(so2.r, hex_ita_10km.sp, 
+                  fun = mean, weights  = T)
+
+airquality.df <- data.frame()
+
+for (i in 1:length(dates)) {
+  print(i)
+  airquality.df <-
+    rbind(airquality.df,
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'pm10_conc',
+                     value = pm10.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'pm2p5_conc',
+                     value = pm2p5.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'co_conc',
+                     value = co.extr[,i]),
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'no2_conc',
+                     value = no2.extr[,i]),
+          
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'no_conc',
+                     value = no.extr[,i]),
+          
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'o3_conc',
+                     value = o3.extr[,i]),
+          
+          data.frame(hex_id = 1:nrow(hex_ita_10km.sf),
+                     date = dates[i],
+                     var = 'so2_conc',
+                     value = so2.extr[,i])
+    )
+}
+
+save(airquality.df, file = "airquality.df.RData")
+
+```
+
+```{r eval = F}
 fun2 <- function(i) {
   smpl_var <- sample(unique(airquality.df$var), 1)
   smpl_date <- sample(unique(airquality.df$date), 1)
   smpl_dat <- airquality.df %>% filter(var == smpl_var & date == smpl_date)
-  hex_ita_1km.sf$smpl_value <- smpl_dat$value
-  return(ggplot(hex_ita_1km.sf) +
+  hex_ita_10km.sf$smpl_value <- smpl_dat$value
+  return(ggplot(hex_ita_10km.sf) +
            geom_sf(aes(fill = smpl_value), colour = NA) +
            scale_fill_distiller(palette = "Spectral", direction = 1) +
            theme(axis.text = element_blank(),
@@ -92,19 +233,19 @@ gdal_translate -a_srs EPSG:4326 .grib -of Gtiff .tif
 
 
 Files:
-adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.grib
-adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.grib
-adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.grib
-adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.grib
+adaptor.mars.internal-1613542488.2219167-23472-25-4599c3c5-f63c-466e-b43b-b1c461bbc8cb-temp.grib
+adaptor.mars.internal-1613542518.5545087-6392-3-2ae82254-839a-4f3e-bf3a-f10528d883ac-dewp.grib
+adaptor.mars.internal-1613542460.1225214-13302-27-b8efaa2d-2508-45c2-9710-6cbcd0ab550a-prec.grib
+adaptor.mars.internal-1613542505.2807376-11678-25-42f58f74-7c7d-4e0c-a249-18c00c2e973d-pres.grib
 
 Commands:
-gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.grib -of Gtiff adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.tif
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1613542488.2219167-23472-25-4599c3c5-f63c-466e-b43b-b1c461bbc8cb-temp.grib -of Gtiff adaptor.mars.internal-1613542488.2219167-23472-25-4599c3c5-f63c-466e-b43b-b1c461bbc8cb-temp.tif
 
-gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.grib -of Gtiff adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.tif
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1613542518.5545087-6392-3-2ae82254-839a-4f3e-bf3a-f10528d883ac-dewp.grib -of Gtiff adaptor.mars.internal-1613542518.5545087-6392-3-2ae82254-839a-4f3e-bf3a-f10528d883ac-dewp.tif
 
-gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.grib -of Gtiff adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.tif
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1613542460.1225214-13302-27-b8efaa2d-2508-45c2-9710-6cbcd0ab550a-prec.grib -of Gtiff adaptor.mars.internal-1613542460.1225214-13302-27-b8efaa2d-2508-45c2-9710-6cbcd0ab550a-prec.tif
 
-gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.grib -of Gtiff adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.tif
+gdal_translate -a_srs EPSG:4326 adaptor.mars.internal-1613542505.2807376-11678-25-42f58f74-7c7d-4e0c-a249-18c00c2e973d-pres.grib -of Gtiff adaptor.mars.internal-1613542505.2807376-11678-25-42f58f74-7c7d-4e0c-a249-18c00c2e973d-pres.tif
 
 ```{r}
 load("../grid/hex_ita_10km.sf.RData")
@@ -115,42 +256,28 @@ require(sp)
 
 dates <- 
   seq(from = as.Date("2020-01-01"), 
-      to = as.Date("2020-07-05"),
+      length.out = 409,
       by = "day")
 
 prec.r <- 
-  brick('adaptor.mars.internal-1594365010.3592808-30630-21-f57d78e6-5991-4541-b2e8-d2d6881bde25.tif')
+  brick('adaptor.mars.internal-1613542460.1225214-13302-27-b8efaa2d-2508-45c2-9710-6cbcd0ab550a-prec.tif')
 names(prec.r) <- 
-  seq(from = as.Date("2020-01-01"), 
-      to = as.Date("2020-07-05"),
-      by = "day")
+  dates
 
 temp.r <- 
-  brick('adaptor.mars.internal-1594365022.5107076-24267-22-6f64132e-6be2-435e-8f0c-afc486589c1f.tif')
+  brick('adaptor.mars.internal-1613542488.2219167-23472-25-4599c3c5-f63c-466e-b43b-b1c461bbc8cb-temp.tif')
 names(temp.r) <- 
-  seq(from = as.Date("2020-01-01"), 
-      to = as.Date("2020-07-05"),
-      by = "day")
+  dates
 
 pres.r <- 
-  brick('adaptor.mars.internal-1594365045.745545-22240-36-7ba14d18-e5df-4f09-a6d7-6a9dad00c178.tif')
+  brick('adaptor.mars.internal-1613542505.2807376-11678-25-42f58f74-7c7d-4e0c-a249-18c00c2e973d-pres.tif')
 names(pres.r) <- 
-  seq(from = as.Date("2020-01-01"), 
-      to = as.Date("2020-07-05"),
-      by = "day")
+  dates
 
 dewp.r <- 
-  brick('adaptor.mars.internal-1594365033.0280426-24640-3-05ed6dec-ddcd-458c-b27c-bcf411e34fae.tif')
+  brick('adaptor.mars.internal-1613542518.5545087-6392-3-2ae82254-839a-4f3e-bf3a-f10528d883ac-dewp.tif')
 names(dewp.r) <- 
-  seq(from = as.Date("2020-01-01"), 
-      to = as.Date("2020-07-05"),
-      by = "day")
-
-crs(r) <- 
-  "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0" 
-
-ita.sp <- 
-  readRDS("gadm36_ITA_0_sp.rds")
+  dates
 
 hex_ita_10km.sp <- 
   as_Spatial(hex_ita_10km.sf %>% st_transform(4326))
@@ -205,6 +332,7 @@ test.sf <-
 test.sf$value <- dewp.extr[,10]
 
 ggplot(test.sf) + geom_sf(aes(fill = value), colour = NA)
+
 ```
 
 # Europe air quality
@@ -221,7 +349,7 @@ gdal_translate -a_srs EPSG:4326 adaptor.cams_regional_fc.retrieve-1596182225.278
 
 
 
-```{r}
+```{r eval = F}
 require(raster)
 require(sf)
 require(sp)

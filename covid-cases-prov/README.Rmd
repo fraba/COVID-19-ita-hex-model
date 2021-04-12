@@ -51,11 +51,11 @@ dat.df$tamponi[dat.df$codice_regione == 16 &
 require(zoo)
 reg_testing.df <- 
   dat.df %>%
-  mutate(date = as.Date(data, format = "%Y-%m-%dT%H:%M:%S")) %>%
-  select(codice_regione, denominazione_regione, date, nuovi_positivi, tamponi) %>%
-  group_by(codice_regione, denominazione_regione) %>%
-  arrange(date) %>%
-  mutate(cases_ma7 = rollmean(nuovi_positivi, 7, align = 'left', fill = NA),
+  dplyr::mutate(date = as.Date(data, format = "%Y-%m-%dT%H:%M:%S")) %>%
+  dplyr::select(codice_regione, denominazione_regione, date, nuovi_positivi, tamponi) %>%
+  dplyr::group_by(codice_regione, denominazione_regione) %>%
+  dplyr::arrange(date) %>%
+  dplyr::mutate(cases_ma7 = rollmean(nuovi_positivi, 7, align = 'left', fill = NA),
          tests_ma7 = rollmean(tamponi, 7, align = 'left', fill = NA))
 
 require(ggplot2)
